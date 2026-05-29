@@ -1,0 +1,115 @@
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 680px;
+}
+
+.welcome-banner {
+  background: var(--ocean-light);
+  border: 1px solid var(--ocean);
+  color: var(--ocean-dark);
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.profile-header h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  color: var(--deep);
+}
+
+.profile-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.profile-section h2 {
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--deep);
+  margin-bottom: 6px;
+}
+
+.section-hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.interest-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.interest-btn {
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: white;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.interest-btn:hover { border-color: var(--ocean); color: var(--ocean); }
+.interest-btn.active { background: var(--ocean); border-color: var(--ocean); color: white; }
+
+.hashtag-block {
+  margin-bottom: 20px;
+}
+
+.hashtag-block h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.tag-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tag-row input { flex: 1; max-width: 260px; }
+
+.tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.tag:hover { opacity: 0.75; }
+
+.tag-include { background: #dcfce7; color: #15803d; }
+.tag-exclude { background: #fee2e2; color: #b91c1c; }
+.tag-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+
+@media (max-width: 480px) {
+  .tag-row { flex-wrap: wrap; }
+  .tag-row input { max-width: 100%; flex: 1 1 100%; }
+  .interest-grid { gap: 8px; }
+  .interest-btn  { font-size: 13px; padding: 7px 14px; }
+}

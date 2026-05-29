@@ -1,0 +1,16 @@
+{
+  "name": "wavelength",
+  "version": "1.0.0",
+  "description": "Social media content discovery app for science communicators",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "npm --prefix server run dev",
+    "client:dev": "npm --prefix client run dev",
+    "server:start": "npm --prefix server start",
+    "client:build": "npm --prefix client run build",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

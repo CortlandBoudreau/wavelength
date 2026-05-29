@@ -1,0 +1,128 @@
+.story-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 720px;
+}
+
+.back-link {
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.back-link:hover { color: var(--ocean); }
+
+.guest-notice {
+  background: #fef9c3;
+  border: 1px solid #fde047;
+  color: #713f12;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-badges { display: flex; gap: 8px; }
+
+.detail-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 26px;
+  line-height: 1.3;
+  color: var(--deep);
+}
+
+.detail-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.detail-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.detail-section h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--deep);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bullets-list {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bullets-list li {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.detail-hashtags {
+  font-size: 14px;
+  color: var(--ocean);
+  font-weight: 500;
+  line-height: 1.8;
+}
+
+.tag-input-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.tag-input-row input {
+  width: 100%;
+  max-width: 240px;
+}
+
+@media (max-width: 480px) {
+  .tag-input-row input { max-width: 100%; }
+  .detail-title { font-size: 20px; }
+  .detail-actions { flex-wrap: wrap; }
+  .detail-actions .btn { flex: 1; justify-content: center; }
+}
+
+.tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  background: var(--ocean-light);
+  color: var(--ocean-dark);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tag:hover { background: #c9e4f7; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--deep);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  z-index: 1000;
+}

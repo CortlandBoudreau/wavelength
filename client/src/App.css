@@ -1,0 +1,220 @@
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 230px;
+  background: var(--deep);
+  color: white;
+  padding: 20px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* subtle ocean gradient at bottom of sidebar */
+.sidebar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(to top, rgba(74,158,219,0.08), transparent);
+  pointer-events: none;
+}
+
+/* wave accent line under brand */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(74,158,219,0.2);
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 0.9;
+  transition: opacity 0.15s;
+}
+
+.sidebar-brand:hover {
+  text-decoration: none;
+  opacity: 1;
+}
+
+/* ── Nav links ── */
+.nav-links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-links a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #7a96ae;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-links a:hover {
+  background: rgba(255,255,255,0.07);
+  color: white;
+}
+
+.nav-links a.active {
+  background: rgba(74,158,219,0.18);
+  color: #7ec8f0;
+}
+
+/* ── Footer ── */
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(74,158,219,0.25);
+  color: #4A9EDB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 1px solid rgba(74,158,219,0.3);
+}
+
+.sidebar-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #a0b4c8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-guest-tag {
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sidebar-logout {
+  width: 100%;
+  font-size: 12px;
+  color: #4a6a88;
+  border-color: rgba(255,255,255,0.08);
+  justify-content: center;
+  padding: 7px;
+}
+
+.sidebar-logout:hover {
+  color: white;
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* ── Main content ── */
+.main-content {
+  margin-left: 230px;
+  flex: 1;
+  padding: 32px;
+  max-width: 1200px;
+}
+
+/* ── Full-page spinner (auth loading) ── */
+.app-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--ocean);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Mobile bottom nav ── */
+.mobile-nav { display: none; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+
+  .main-content {
+    margin-left: 0;
+    padding: 16px 16px 84px; /* bottom clearance for mobile nav */
+  }
+
+  .mobile-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--deep);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 200;
+    padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+  }
+
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 4px;
+    color: #6b8aaa;
+    font-size: 10px;
+    font-weight: 500;
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+
+  .mobile-nav-item.active { color: #4A9EDB; }
+  .mobile-nav-item:hover  { color: white; text-decoration: none; }
+
+  .mobile-nav-icon { font-size: 20px; line-height: 1; }
+
+  .mobile-nav-btn { /* button reset */ }
+}
