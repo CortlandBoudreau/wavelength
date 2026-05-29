@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { startScheduler } = require('./services/scheduler');
+const pool = require('./db/pool');
 
 const REQUIRED_VARS = ['DATABASE_URL', 'ANTHROPIC_API_KEY', 'NEWS_API_KEY', 'SENDGRID_API_KEY', 'EMAIL_TO', 'EMAIL_FROM', 'JWT_SECRET'];
 const missing = REQUIRED_VARS.filter((v) => !process.env[v]);
@@ -85,7 +86,14 @@ app.use('/api/trending', require('./routes/trending'));
 app.use('/api/sources', require('./routes/sources'));
 app.use('/api/feedback', require('./routes/feedback'));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', db: 'ok' });
+  } catch (e) {
+    res.status(503).json({ status: 'error', db: 'unreachable', message: e.message });
+  }
+});
 
 app.use((err, req, res, next) => {
   console.error(err);
