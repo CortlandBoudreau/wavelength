@@ -10,7 +10,8 @@ const { clusterRecentStories } = require('../services/clusterStories');
 
 const FREE_DAILY_LIMIT = 3;
 
-// GET /api/stories — public, but attaches user interactions if logged in
+// GET /api/stories — public, attaches user interactions if logged in
+// No feed cap — all stories visible to everyone. Free tier gates the detail view.
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { favorited, limit = 50, offset = 0 } = req.query;
@@ -18,47 +19,9 @@ router.get('/', optionalAuth, async (req, res) => {
     const categories = req.query.categories
       ? req.query.categories.split(',').filter((c) => VALID_CATEGORIES.has(c))
       : null;
-    let safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
     const safeOffset = Math.max(parseInt(offset) || 0, 0);
     const userId = req.user?.id || null;
-
-    // ── Free-tier gate ──────────────────────────────────────────────────────
-    let isFree = !userId; // guests always limited
-    if (userId) {
-      const { rows: [u] } = await pool.query(
-        'SELECT subscription_tier, subscription_expires_at FROM users WHERE id = $1',
-        [userId]
-      );
-      const tier = u?.subscription_tier ?? 'free';
-      const exp  = u?.subscription_expires_at ? new Date(u.subscription_expires_at) : null;
-      isFree = tier === 'free' || (tier !== 'lifetime' && (!exp || exp <= new Date()));
-    }
-
-    let viewsToday = 0;
-
-    if (isFree && userId) {
-      // Ensure a row exists for today
-      await pool.query(
-        `INSERT INTO story_views (user_id, view_date, count)
-         VALUES ($1, CURRENT_DATE, 0)
-         ON CONFLICT (user_id, view_date) DO NOTHING`,
-        [userId]
-      );
-      const { rows: [vr] } = await pool.query(
-        'SELECT count FROM story_views WHERE user_id = $1 AND view_date = CURRENT_DATE',
-        [userId]
-      );
-      viewsToday = vr?.count ?? 0;
-
-      if (viewsToday >= FREE_DAILY_LIMIT) {
-        return res.json({ stories: [], limitReached: true, viewsToday });
-      }
-      safeLimit = Math.min(safeLimit, FREE_DAILY_LIMIT - viewsToday);
-    } else if (isFree && !userId) {
-      // Guests: cap each request at the daily limit (no persistent tracking)
-      safeLimit = Math.min(safeLimit, FREE_DAILY_LIMIT);
-    }
-    // ────────────────────────────────────────────────────────────────────────
 
     const conditions = ['s.deleted_at IS NULL'];
     const params = [userId];
@@ -85,20 +48,7 @@ router.get('/', optionalAuth, async (req, res) => {
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, safeLimit, safeOffset]);
 
-    // Increment daily view count for tracked free users
-    if (isFree && userId && rows.length > 0) {
-      await pool.query(
-        'UPDATE story_views SET count = count + $1 WHERE user_id = $2 AND view_date = CURRENT_DATE',
-        [rows.length, userId]
-      );
-      viewsToday += rows.length;
-    }
-
-    // For guests, viewsToday is not tracked server-side — infer from response size
-    const limitReached = isFree && (userId
-      ? viewsToday >= FREE_DAILY_LIMIT
-      : rows.length >= FREE_DAILY_LIMIT);
-    res.json({ stories: rows, limitReached, viewsToday });
+    res.json({ stories: rows });
   } catch (err) {
     console.error('[GET /stories]', err.message);
     res.status(500).json({ error: 'Failed to load stories' });
@@ -118,11 +68,42 @@ router.get('/categories', async (req, res) => {
   }
 });
 
-// GET /api/stories/:id — public
+// GET /api/stories/:id — public, but free-tier users are capped at 3 detail views/day
 router.get('/:id', optionalAuth, async (req, res) => {
   if (!validateUUID(req.params.id, res)) return;
   try {
     const userId = req.user?.id || null;
+
+    // ── Free-tier gate ──────────────────────────────────────────────────────
+    // Guests are gated client-side (no user_id to track here).
+    if (userId) {
+      const { rows: [u] } = await pool.query(
+        'SELECT subscription_tier, subscription_expires_at FROM users WHERE id = $1',
+        [userId]
+      );
+      const tier = u?.subscription_tier ?? 'free';
+      const exp  = u?.subscription_expires_at ? new Date(u.subscription_expires_at) : null;
+      const isFree = tier === 'free' || (tier !== 'lifetime' && (!exp || exp <= new Date()));
+
+      if (isFree) {
+        const { rows: [vr] } = await pool.query(
+          'SELECT count FROM story_views WHERE user_id = $1 AND view_date = CURRENT_DATE',
+          [userId]
+        );
+        const viewsToday = vr?.count ?? 0;
+        if (viewsToday >= FREE_DAILY_LIMIT) {
+          return res.status(402).json({ limitReached: true, viewsToday });
+        }
+        await pool.query(
+          `INSERT INTO story_views (user_id, view_date, count)
+           VALUES ($1, CURRENT_DATE, 1)
+           ON CONFLICT (user_id, view_date) DO UPDATE SET count = story_views.count + 1`,
+          [userId]
+        );
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const { rows } = await pool.query(`
       SELECT s.*, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.engagement_score,
              i.favorited, i.notes, i.tags, i.used

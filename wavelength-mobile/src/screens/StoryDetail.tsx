@@ -20,7 +20,7 @@ import { categoryEmoji, formatCategory } from "../utils/categories";
 
 interface Props {
   route: { params: { storyId: string } };
-  navigation: { goBack: () => void };
+  navigation: { goBack: () => void; replace: (screen: string) => void };
 }
 
 const styles = StyleSheet.create({
@@ -53,10 +53,16 @@ export default function StoryDetail({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchStory(storyId).then((s) => {
-      setStory(s);
-      setNotes(s.notes ?? "");
-    });
+    fetchStory(storyId)
+      .then((s) => {
+        setStory(s);
+        setNotes(s.notes ?? "");
+      })
+      .catch((err: any) => {
+        if (err?.response?.status === 402) {
+          navigation.replace("Paywall");
+        }
+      });
   }, [storyId]);
 
   const toggle = async (field: "favorited" | "used") => {

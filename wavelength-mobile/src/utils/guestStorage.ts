@@ -2,6 +2,36 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY_PREFIX = "guest_interaction_";
 
+// ── Guest story detail view tracking ─────────────────────────────────────────
+const GUEST_VIEWS_KEY = "guest_story_views";
+
+interface GuestViewRecord { count: number; date: string }
+
+const todayStr = () => new Date().toISOString().split("T")[0];
+
+export const getGuestStoryViewsToday = async (): Promise<number> => {
+  try {
+    const raw = await AsyncStorage.getItem(GUEST_VIEWS_KEY);
+    if (!raw) return 0;
+    const record: GuestViewRecord = JSON.parse(raw);
+    return record.date === todayStr() ? record.count : 0;
+  } catch {
+    return 0;
+  }
+};
+
+export const incrementGuestStoryViews = async (): Promise<void> => {
+  try {
+    const existing = await getGuestStoryViewsToday();
+    await AsyncStorage.setItem(
+      GUEST_VIEWS_KEY,
+      JSON.stringify({ count: existing + 1, date: todayStr() })
+    );
+  } catch {
+    // ignore
+  }
+};
+
 export interface GuestInteraction {
   favorited?: boolean;
   used?: boolean;

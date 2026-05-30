@@ -36,8 +36,6 @@ export interface FetchStoriesParams {
 
 export interface FetchStoriesResult {
   stories: Story[];
-  limitReached: boolean;
-  viewsToday: number;
 }
 
 export const fetchStories = async (params?: FetchStoriesParams): Promise<FetchStoriesResult> => {

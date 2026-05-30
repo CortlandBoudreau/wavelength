@@ -8,11 +8,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { fetchStories, type Story, type Category } from "../api/stories";
 import { fetchTrendingHashtags } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
+import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
 import { useAuth } from "../context/AuthContext";
 import StoryCard from "../components/StoryCard";
 import SkeletonCard from "../components/SkeletonCard";
@@ -21,8 +22,7 @@ import HashtagPill from "../components/HashtagPill";
 import WaveLogo from "../components/WaveLogo";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
-type FeedItem = Story | { _type: "paywall" };
-const FREE_DAILY_LIMIT = 3;
+const FREE_DETAIL_LIMIT = 3;
 
 type DashboardNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -32,7 +32,6 @@ export default function Dashboard() {
   const navigation = useNavigation<DashboardNav>();
   const { isGuest, user, guestInterests } = useAuth();
   const [stories, setStories] = useState<Story[]>([]);
-  const [limitReached, setLimitReached] = useState(false);
   // Use the interests the user picked during onboarding as the category tabs
   const categories: Category[] = (user?.interests ?? guestInterests) as Category[];
   const [category, setCategory] = useState<Category | "all">("all");
@@ -52,7 +51,6 @@ export default function Dashboard() {
         hashtag,
       });
       setStories(deduplicateClusters(result.stories));
-      setLimitReached(result.limitReached);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setFetchError(msg);
@@ -75,12 +73,18 @@ export default function Dashboard() {
     Promise.all([loadStories(), loadTrending()]).finally(() => setLoading(false));
   }, [loadStories, loadTrending]);
 
-  // Silently re-check stories when returning from Paywall after a purchase
-  useFocusEffect(
-    useCallback(() => {
-      if (limitReached) loadStories();
-    }, [limitReached, loadStories])
-  );
+  // Handle story tap — check guest limit before navigating
+  const handleStoryPress = useCallback(async (story: Story) => {
+    if (isGuest) {
+      const views = await getGuestStoryViewsToday();
+      if (views >= FREE_DETAIL_LIMIT) {
+        navigation.navigate("Paywall");
+        return;
+      }
+      await incrementGuestStoryViews();
+    }
+    navigation.navigate("StoryDetail", { storyId: story.id });
+  }, [isGuest, navigation]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -143,56 +147,14 @@ export default function Dashboard() {
       ) : (
         <FlatList
           style={{ backgroundColor: "#F5F0E8" }}
-          data={(() => {
-            const items: FeedItem[] = [...stories];
-            if (limitReached) {
-              items.push({ _type: "paywall" });
-            }
-            return items;
-          })()}
-          keyExtractor={(item) => "_type" in item ? "paywall" : item.id}
-          renderItem={({ item }) => {
-            if ("_type" in item) {
-              return (
-                <Pressable
-                  onPress={() => navigation.navigate("Paywall")}
-                  style={{
-                    margin: 14,
-                    borderRadius: 16,
-                    backgroundColor: "#1a2a3a",
-                    padding: 20,
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <Text style={{ color: "#4A9EDB", fontSize: 22 }}>🌊</Text>
-                  <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 16, textAlign: "center" }}>
-                    You've read your 3 free stories today
-                  </Text>
-                  <Text style={{ color: "#7a96ae", fontSize: 13, textAlign: "center", lineHeight: 19 }}>
-                    Go Pro for unlimited stories, AI summaries,{"\n"}and your daily email digest.
-                  </Text>
-                  <View style={{
-                    backgroundColor: "#4A9EDB", borderRadius: 10,
-                    paddingVertical: 11, paddingHorizontal: 28, marginTop: 6,
-                  }}>
-                    <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 14 }}>
-                      Start 7-Day Free Trial
-                    </Text>
-                  </View>
-                  <Text style={{ color: "#4a6a84", fontSize: 11, marginTop: 2 }}>
-                    Resets tomorrow · Cancel anytime
-                  </Text>
-                </Pressable>
-              );
-            }
-            return (
-              <StoryCard
-                story={item}
-                onPress={(s) => navigation.navigate("StoryDetail", { storyId: s.id })}
-              />
-            );
-          }}
+          data={stories}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <StoryCard
+              story={item}
+              onPress={handleStoryPress}
+            />
+          )}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
