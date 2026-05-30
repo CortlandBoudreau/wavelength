@@ -94,7 +94,10 @@ router.get('/', optionalAuth, async (req, res) => {
       viewsToday += rows.length;
     }
 
-    const limitReached = isFree && viewsToday >= FREE_DAILY_LIMIT;
+    // For guests, viewsToday is not tracked server-side — infer from response size
+    const limitReached = isFree && (userId
+      ? viewsToday >= FREE_DAILY_LIMIT
+      : rows.length >= FREE_DAILY_LIMIT);
     res.json({ stories: rows, limitReached, viewsToday });
   } catch (err) {
     console.error('[GET /stories]', err.message);
