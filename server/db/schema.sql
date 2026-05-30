@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
   interests               TEXT[]      DEFAULT '{}',
   hashtag_includes        TEXT[]      DEFAULT '{}',
   hashtag_excludes        TEXT[]      DEFAULT '{}',
-  subscription_tier       TEXT        NOT NULL DEFAULT 'trial'
+  subscription_tier       TEXT        NOT NULL DEFAULT 'free'
     CHECK (subscription_tier IN ('free', 'trial', 'pro', 'lifetime')),
   subscription_expires_at TIMESTAMPTZ DEFAULT NULL,
   created_at              TIMESTAMPTZ DEFAULT NOW()

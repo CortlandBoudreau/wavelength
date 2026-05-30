@@ -27,7 +27,7 @@ BEGIN
     WHERE table_name = 'users' AND column_name = 'subscription_tier'
   ) THEN
     ALTER TABLE users
-      ADD COLUMN subscription_tier TEXT NOT NULL DEFAULT 'trial'
+      ADD COLUMN subscription_tier TEXT NOT NULL DEFAULT 'free'
         CHECK (subscription_tier IN ('free', 'trial', 'pro', 'lifetime'));
   END IF;
 END $$;
