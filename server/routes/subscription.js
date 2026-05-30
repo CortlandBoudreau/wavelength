@@ -227,9 +227,9 @@ router.post('/webhook/revenuecat', async (req, res) => {
 });
 
 // ── POST /api/subscription/admin/codes — create a new promo code ─────────────
-// Protected by ADMIN_SECRET header, not user auth.
+// Protected by ADMIN_KEY header, not user auth.
 router.post('/admin/codes', (req, res, next) => {
-  const secret = process.env.ADMIN_SECRET;
+  const secret = process.env.ADMIN_KEY;
   if (!secret || req.headers['x-admin-secret'] !== secret) {
     return res.status(403).json({ error: 'Forbidden' });
   }

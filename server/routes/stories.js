@@ -140,7 +140,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // POST /api/stories/refresh — admin only (server-side secret, not user auth)
 // Aggregation runs automatically via the scheduler; this exists for manual dev triggers.
 router.post('/refresh', (req, res, next) => {
-  const secret = process.env.ADMIN_SECRET;
+  const secret = process.env.ADMIN_KEY;
   if (!secret || req.headers['x-admin-secret'] !== secret) {
     return res.status(403).json({ error: 'Forbidden' });
   }
