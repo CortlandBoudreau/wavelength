@@ -17,6 +17,10 @@
     "store": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://wavelength-staging.up.railway.app/api",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE"
       }
     },
     "production": {
