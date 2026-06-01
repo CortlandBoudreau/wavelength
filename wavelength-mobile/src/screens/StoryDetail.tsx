@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Haptics from "expo-haptics";
 import { Share } from "react-native";
 import { fetchStory, toggleFavorite, toggleUsed, saveStoryNotes, generateCaption, fetchRelatedStories, type Story } from "../api/stories";
 import HashtagPill from "../components/HashtagPill";
@@ -57,7 +58,7 @@ export default function StoryDetail({ route, navigation }: Props) {
   const [caption, setCaption] = useState<string | null>(null);
   const [captionLoading, setCaptionLoading] = useState(false);
   const [captionVisible, setCaptionVisible] = useState(false);
-  const [copied, setCopied] = useState<"caption" | "hashtags" | null>(null);
+  const [copied, setCopied] = useState<"caption" | "hashtags" | "package" | null>(null);
   const [related, setRelated] = useState<Story[]>([]);
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export default function StoryDetail({ route, navigation }: Props) {
 
   const toggle = async (field: "favorited" | "used") => {
     if (!story) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // Optimistic update so the button responds instantly
     const prev = story;
     setStory({ ...story, [field]: !story[field] });
@@ -117,6 +119,7 @@ export default function StoryDetail({ route, navigation }: Props) {
 
   const handleGenerateCaption = async () => {
     if (!story) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCaptionLoading(true);
     setCaptionVisible(true);
     try {
@@ -130,10 +133,17 @@ export default function StoryDetail({ route, navigation }: Props) {
     }
   };
 
-  const copyToClipboard = async (text: string, type: "caption" | "hashtags") => {
+  const copyToClipboard = async (text: string, type: "caption" | "hashtags" | "package") => {
     await Clipboard.setStringAsync(text);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCopied(type);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleCopyPackage = () => {
+    if (!story) return;
+    const pkg = `${story.title}\n\n${story.summary}\n\n${hashtagString}`;
+    copyToClipboard(pkg, "package");
   };
 
   const { user } = useAuth();
@@ -290,6 +300,22 @@ export default function StoryDetail({ route, navigation }: Props) {
             </Pressable>
           </View>
         )}
+
+        {/* Copy full package — always available */}
+        <Pressable
+          onPress={handleCopyPackage}
+          style={{
+            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+            backgroundColor: copied === "package" ? "#dcfce7" : "#ffffff",
+            borderRadius: 12, paddingVertical: 13, marginBottom: 10,
+            borderWidth: 1.5, borderColor: copied === "package" ? "#22c55e" : "#b0bec5",
+          }}
+        >
+          <Ionicons name={copied === "package" ? "checkmark" : "layers-outline"} size={16} color={copied === "package" ? "#22c55e" : "#6b7a8d"} />
+          <Text style={{ color: copied === "package" ? "#166534" : "#6b7a8d", fontSize: 14, fontWeight: "700" }}>
+            {copied === "package" ? "Copied!" : "Copy Title + Summary + Hashtags"}
+          </Text>
+        </Pressable>
 
         {/* Generate caption — logged-in only */}
         {isLoggedIn && (

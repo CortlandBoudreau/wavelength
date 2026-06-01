@@ -6,7 +6,9 @@ import {
   RefreshControl,
   Pressable,
   TextInput,
+  Animated,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -44,6 +46,9 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
+  const [newBannerCount, setNewBannerCount] = useState(0);
+  const bannerOpacity = useRef(new Animated.Value(0)).current;
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trendingFetchedAt = useRef<number>(0);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -107,14 +112,52 @@ export default function Dashboard() {
     }, 400);
   };
 
+  const showNewBanner = (count: number) => {
+    if (count <= 0) return;
+    setNewBannerCount(count);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.sequence([
+      Animated.timing(bannerOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(2800),
+      Animated.timing(bannerOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
+    const prevIds = new Set(stories.map((s) => s.id));
     await loadStories();
+    // Count how many IDs we have after that aren't in the old set
+    // We read `stories` via a callback to get the post-load value
+    setStories((latest) => {
+      const added = latest.filter((s) => !prevIds.has(s.id)).length;
+      if (added > 0) showNewBanner(added);
+      return latest;
+    });
     setRefreshing(false);
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["top", "left", "right"]}>
+      {/* New stories banner */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute", top: 60, left: 0, right: 0, zIndex: 99,
+          alignItems: "center", opacity: bannerOpacity,
+        }}
+      >
+        <View style={{
+          backgroundColor: "#22c55e", borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8,
+          flexDirection: "row", alignItems: "center", gap: 6,
+          shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, elevation: 6,
+        }}>
+          <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 13 }}>
+            ✦ {newBannerCount} new {newBannerCount === 1 ? "story" : "stories"} added
+          </Text>
+        </View>
+      </Animated.View>
+
       {/* Header */}
       <View style={{ backgroundColor: "#1a2a3a", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
