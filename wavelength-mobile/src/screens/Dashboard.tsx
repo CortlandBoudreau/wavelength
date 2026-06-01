@@ -18,6 +18,7 @@ import { fetchTrendingHashtags } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
 import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
 import { useAuth } from "../context/AuthContext";
+import { isProUser } from "../utils/proCheck";
 import StoryCard from "../components/StoryCard";
 import SkeletonCard from "../components/SkeletonCard";
 import CategoryTabs from "../components/CategoryTabs";
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const navigation = useNavigation<DashboardNav>();
   const { isGuest, user, guestInterests } = useAuth();
   const isLoggedIn = !!user;
+  const isPro = isProUser(user);
   const [stories, setStories] = useState<Story[]>([]);
   // Use the interests the user picked during onboarding as the category tabs
   const categories: Category[] = (user?.interests ?? guestInterests) as Category[];
@@ -202,7 +204,7 @@ export default function Dashboard() {
             </Text>
           </Pressable>
 
-          {isLoggedIn && (
+          {isLoggedIn && isPro && (
             <Pressable
               onPress={() => setHidePosted((h) => !h)}
               style={{
@@ -258,7 +260,7 @@ export default function Dashboard() {
       ) : (
         <FlatList
           style={{ backgroundColor: "#F5F0E8" }}
-          data={hidePosted ? stories.filter((s) => !s.used) : stories}
+          data={hidePosted && isPro ? stories.filter((s) => !s.used) : stories}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <StoryCard

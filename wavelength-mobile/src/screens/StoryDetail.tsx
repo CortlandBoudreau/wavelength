@@ -20,6 +20,7 @@ import { fetchStory, toggleFavorite, toggleUsed, saveStoryNotes, generateCaption
 import HashtagPill from "../components/HashtagPill";
 import ScoreBadge from "../components/ScoreBadge";
 import { useAuth } from "../context/AuthContext";
+import { isProUser } from "../utils/proCheck";
 import { categoryEmoji, formatCategory } from "../utils/categories";
 
 interface Props {
@@ -148,6 +149,7 @@ export default function StoryDetail({ route, navigation }: Props) {
 
   const { user } = useAuth();
   const isLoggedIn = !!user;
+  const isPro = isProUser(user);
 
   if (!story) {
     return (
@@ -317,8 +319,8 @@ export default function StoryDetail({ route, navigation }: Props) {
           </Text>
         </Pressable>
 
-        {/* Generate caption — logged-in only */}
-        {isLoggedIn && (
+        {/* Generate caption */}
+        {isLoggedIn && isPro ? (
           <Pressable
             onPress={handleGenerateCaption}
             disabled={captionLoading}
@@ -335,10 +337,25 @@ export default function StoryDetail({ route, navigation }: Props) {
               {captionLoading ? "Writing caption…" : "Generate Caption"}
             </Text>
           </Pressable>
-        )}
+        ) : isLoggedIn ? (
+          <Pressable
+            onPress={() => navigation.replace("Paywall")}
+            style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+              backgroundColor: "#f0f4f8", borderRadius: 12, paddingVertical: 14, marginBottom: 14,
+              borderWidth: 1.5, borderColor: "#b0bec5",
+            }}
+          >
+            <Ionicons name="lock-closed-outline" size={16} color="#9aafc0" />
+            <Text style={{ color: "#9aafc0", fontWeight: "700", fontSize: 15 }}>Generate Caption</Text>
+            <View style={{ backgroundColor: "#4A9EDB", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+              <Text style={{ color: "#fff", fontSize: 10, fontWeight: "800" }}>PRO</Text>
+            </View>
+          </Pressable>
+        ) : null}
 
-        {/* Action buttons — logged-in only */}
-        {isLoggedIn ? (
+        {/* Action buttons — pro only */}
+        {isLoggedIn && isPro ? (
           <>
             <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
               <Pressable
@@ -421,7 +438,23 @@ export default function StoryDetail({ route, navigation }: Props) {
               </Pressable>
             </View>
           </>
+        ) : isLoggedIn ? (
+          // Logged in but free — pro upsell
+          <View style={[styles.card, { alignItems: "center", paddingVertical: 20 }]}>
+            <Ionicons name="sparkles-outline" size={26} color="#4A9EDB" style={{ marginBottom: 8 }} />
+            <Text style={{ color: "#1a2a3a", fontWeight: "800", fontSize: 15, marginBottom: 6 }}>Pro Feature</Text>
+            <Text style={{ color: "#6b7a8d", fontSize: 13, textAlign: "center", lineHeight: 19, marginBottom: 16 }}>
+              Upgrade to save stories, mark as posted, add notes, and generate captions.
+            </Text>
+            <Pressable
+              onPress={() => navigation.replace("Paywall")}
+              style={{ backgroundColor: "#4A9EDB", borderRadius: 10, paddingVertical: 11, paddingHorizontal: 28 }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>Upgrade to Pro</Text>
+            </Pressable>
+          </View>
         ) : (
+          // Not logged in
           <View style={[styles.card, { alignItems: "center" }]}>
             <Ionicons name="lock-closed-outline" size={22} color="#b0bec5" style={{ marginBottom: 8 }} />
             <Text style={{ color: "#6b7a8d", fontSize: 13, textAlign: "center", lineHeight: 19 }}>
