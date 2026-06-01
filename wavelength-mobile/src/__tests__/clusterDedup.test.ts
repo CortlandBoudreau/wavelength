@@ -66,12 +66,12 @@ describe("deduplicateClusters", () => {
     expect(result[0]).toBe(story);
   });
 
-  test("equal-scored cluster stories keep the last seen", () => {
-    // Both have score 5 — second should NOT replace first (strict >)
+  test("equal-scored cluster stories keep the first seen (strict >)", () => {
+    // The function uses strict > so a tie does NOT replace the incumbent
     const first  = makeStory({ id: "first",  cluster_id: "c1", engagement_score: 5 });
     const second = makeStory({ id: "second", cluster_id: "c1", engagement_score: 5 });
     const result = deduplicateClusters([first, second]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("first"); // strict > keeps first
+    expect(result[0].id).toBe("first");
   });
 });

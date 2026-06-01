@@ -12,7 +12,7 @@ describe("formatCategory", () => {
     expect(formatCategory("science")).toBe("Science");
   });
 
-  test("handles three-word categories", () => {
+  test("handles two-word categories", () => {
     expect(formatCategory("plastic_pollution")).toBe("Plastic Pollution");
   });
 });

@@ -30,9 +30,11 @@ describe('detectSourceType', () => {
     expect(detectSourceType('Mastodon: #oceanscience')).toBe('mastodon');
   });
 
-  test('identifies arxiv exactly', () => {
+  test('identifies arxiv by exact match only', () => {
     expect(detectSourceType('arxiv')).toBe('arxiv');
     expect(detectSourceType('ARXIV')).toBe('arxiv');
+    // Substrings like 'arxiv.org' are NOT detected — falls through to article
+    expect(detectSourceType('arxiv.org')).toBe('article');
   });
 
   test('defaults to article for RSS/unknown sources', () => {
@@ -52,10 +54,11 @@ describe('sanitizeForPrompt', () => {
     expect(sanitizeForPrompt(42)).toBe('');
   });
 
-  test('strips XML article tags to prevent prompt injection', () => {
+  test('replaces XML article tags with [tag] to prevent prompt injection', () => {
     const input = 'before <article>injected</article> after';
-    expect(sanitizeForPrompt(input)).not.toContain('<article>');
-    expect(sanitizeForPrompt(input)).not.toContain('</article>');
+    const result = sanitizeForPrompt(input);
+    // Tags replaced, surrounding content preserved
+    expect(result).toBe('before [tag]injected[tag] after');
   });
 
   test('strips control characters', () => {
@@ -63,9 +66,15 @@ describe('sanitizeForPrompt', () => {
     expect(sanitizeForPrompt(input)).toBe('helloworld');
   });
 
-  test('collapses excessive newlines to max two', () => {
-    const input = 'line1\n\n\n\n\nline2';
-    expect(sanitizeForPrompt(input)).toBe('line1\n\nline2');
+  test('collapses 4+ consecutive newlines to exactly two', () => {
+    expect(sanitizeForPrompt('line1\n\n\n\n\nline2')).toBe('line1\n\nline2'); // 5 → 2
+    expect(sanitizeForPrompt('line1\n\n\n\nline2')).toBe('line1\n\nline2');  // 4 → 2 (boundary)
+  });
+
+  test('does not collapse 3 or fewer consecutive newlines', () => {
+    // regex is {4,} so 3 newlines must be left alone
+    expect(sanitizeForPrompt('line1\n\n\nline2')).toBe('line1\n\n\nline2');
+    expect(sanitizeForPrompt('line1\n\nline2')).toBe('line1\n\nline2');
   });
 
   test('truncates to maxLength', () => {
@@ -137,8 +146,9 @@ describe('parseClaudeResponse', () => {
 
   test('strips non-word characters from hashtags', () => {
     const result = parseClaudeResponse(makeJson({ hashtags: ['#Ocean Science!', '#valid'] }));
-    expect(result.hashtags[0]).not.toContain(' ');
-    expect(result.hashtags[0]).not.toContain('!');
+    // Space and ! are removed, leaving only word chars and #
+    expect(result.hashtags[0]).toBe('#OceanScience');
+    expect(result.hashtags[1]).toBe('#valid');
   });
 
   test('caps hashtag array at 10', () => {
@@ -149,6 +159,12 @@ describe('parseClaudeResponse', () => {
   test('handles empty bullets array gracefully', () => {
     const result = parseClaudeResponse(makeJson({ bullets: [] }));
     expect(result.bullets).toEqual([]);
+  });
+
+  test('throws on completely invalid JSON', () => {
+    // Callers are expected to handle this — document the contract
+    expect(() => parseClaudeResponse('not json at all')).toThrow();
+    expect(() => parseClaudeResponse('')).toThrow();
   });
 });
 
@@ -172,10 +188,9 @@ describe('buildThinContentSummary', () => {
     expect(['educational', 'inspiring', 'surprising', 'trending']).toContain(result.angle);
   });
 
-  test('returns hashtag array', () => {
+  test('returns the expected default hashtags', () => {
     const result = buildThinContentSummary(story);
-    expect(Array.isArray(result.hashtags)).toBe(true);
-    expect(result.hashtags.length).toBeGreaterThan(0);
+    expect(result.hashtags).toEqual(['#Science', '#ScienceNews', '#LearnSomethingNew', '#ScienceFacts', '#Discovery']);
   });
 
   test('marks result as thin content', () => {
