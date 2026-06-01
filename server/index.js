@@ -114,7 +114,8 @@ app.get('/api/health', async (req, res) => {
     await pool.query('SELECT 1');
     res.json({ status: 'ok', db: 'ok' });
   } catch (e) {
-    res.status(503).json({ status: 'error', db: 'unreachable', message: e.message });
+    console.error('[health] DB error:', e.message);
+    res.status(503).json({ status: 'error', db: 'unreachable' });
   }
 });
 

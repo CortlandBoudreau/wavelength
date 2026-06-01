@@ -141,29 +141,66 @@ router.post('/redeem', requireAuth, async (req, res) => {
 });
 
 // ── POST /api/subscription/revenuecat-sync ────────────────────────────────────
-// Called from the app immediately after a successful RevenueCat purchase.
-// Trusts authenticated user — no need to hit RevenueCat REST API here because
-// the webhook handles ongoing renewals/cancellations server-side.
+// Called from the app after a RevenueCat purchase to get the latest status.
+// SECURITY: We do NOT trust client-reported subscription data.
+// Instead, we verify directly against the RevenueCat REST API using the server-side
+// secret key, then return the current DB state (which is authoritative via webhook).
+//
+// Required env var: REVENUECAT_SECRET_KEY (from RevenueCat dashboard → API Keys → Secret)
 router.post('/revenuecat-sync', requireAuth, async (req, res) => {
-  const { activeSubscriptions, expiresAt } = req.body;
+  const secretKey = process.env.REVENUECAT_SECRET_KEY;
 
-  // Sanity-check: only accept if an active sub is reported
-  const isActive = Array.isArray(activeSubscriptions) && activeSubscriptions.length > 0;
-  if (!isActive) {
-    return res.status(400).json({ error: 'No active subscription reported' });
+  if (!secretKey) {
+    // Secret key not configured — fall back to returning current DB state only.
+    // Subscription state will still be correct via webhook; this just means the
+    // app won't immediately reflect a purchase until the webhook fires (~seconds).
+    console.warn('[revenuecat-sync] REVENUECAT_SECRET_KEY not set — returning current DB state');
+    try {
+      const { rows } = await pool.query(
+        'SELECT subscription_tier, subscription_expires_at FROM users WHERE id = $1',
+        [req.user.id]
+      );
+      return res.json({ ok: true, verified: false, ...accessStatus(rows[0]) });
+    } catch (err) {
+      return res.status(500).json({ error: 'Sync failed' });
+    }
   }
 
   try {
-    const expiry = expiresAt ? new Date(expiresAt) : null;
-    await pool.query(
-      `UPDATE users SET subscription_tier = 'pro', subscription_expires_at = $1 WHERE id = $2`,
-      [expiry, req.user.id]
-    );
+    // Verify with RevenueCat REST API — never trust what the client tells us
+    const rcRes = await fetch(`https://api.revenuecat.com/v1/subscribers/${req.user.id}`, {
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!rcRes.ok) {
+      console.error('[revenuecat-sync] RevenueCat API error:', rcRes.status);
+      return res.status(502).json({ error: 'Could not verify subscription — try again shortly' });
+    }
+
+    const { subscriber } = await rcRes.json();
+
+    // Check the "pro" entitlement (must match your RevenueCat entitlement identifier)
+    const entitlement = subscriber?.entitlements?.pro;
+    const isActive = entitlement?.expires_date
+      ? new Date(entitlement.expires_date) > new Date()
+      : !!entitlement;
+
+    if (isActive) {
+      const expiry = entitlement?.expires_date ? new Date(entitlement.expires_date) : null;
+      await pool.query(
+        `UPDATE users SET subscription_tier = 'pro', subscription_expires_at = $1 WHERE id = $2`,
+        [expiry, req.user.id]
+      );
+    }
+
     const { rows } = await pool.query(
       'SELECT subscription_tier, subscription_expires_at FROM users WHERE id = $1',
       [req.user.id]
     );
-    res.json({ ok: true, ...accessStatus(rows[0]) });
+    res.json({ ok: true, verified: true, ...accessStatus(rows[0]) });
   } catch (err) {
     console.error('[POST /subscription/revenuecat-sync]', err.message);
     res.status(500).json({ error: 'Sync failed' });
