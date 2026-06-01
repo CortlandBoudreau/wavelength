@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import * as Speech from "expo-speech";
 import { Share } from "react-native";
 import { fetchStory, toggleFavorite, toggleUsed, saveStoryNotes, generateCaption, fetchRelatedStories, type Story } from "../api/stories";
 import HashtagPill from "../components/HashtagPill";
@@ -61,13 +62,13 @@ export default function StoryDetail({ route, navigation }: Props) {
   const [captionVisible, setCaptionVisible] = useState(false);
   const [copied, setCopied] = useState<"caption" | "hashtags" | "package" | null>(null);
   const [related, setRelated] = useState<Story[]>([]);
+  const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     fetchStory(storyId)
       .then((s) => {
         setStory(s);
         setNotes(s.notes ?? "");
-        // Load related stories in background — non-fatal
         fetchRelatedStories(storyId).then(setRelated).catch(() => {});
       })
       .catch((err: any) => {
@@ -75,7 +76,26 @@ export default function StoryDetail({ route, navigation }: Props) {
           navigation.replace("Paywall");
         }
       });
+    // Stop speech when leaving the screen
+    return () => { Speech.stop(); };
   }, [storyId]);
+
+  const handleSpeak = async () => {
+    if (speaking) {
+      await Speech.stop();
+      setSpeaking(false);
+      return;
+    }
+    if (!story?.summary) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSpeaking(true);
+    Speech.speak(story.summary, {
+      rate: 0.95,
+      onDone: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+      onStopped: () => setSpeaking(false),
+    });
+  };
 
   const toggle = async (field: "favorited" | "used") => {
     if (!story) return;
@@ -220,6 +240,9 @@ export default function StoryDetail({ route, navigation }: Props) {
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <Pressable onPress={handleSpeak} hitSlop={8}>
+            <Ionicons name={speaking ? "stop-circle-outline" : "volume-medium-outline"} size={22} color={speaking ? "#4A9EDB" : "#7ec8f0"} />
+          </Pressable>
           <Pressable onPress={handleShare} hitSlop={8}>
             <Ionicons name="share-outline" size={22} color="#7ec8f0" />
           </Pressable>
@@ -240,6 +263,14 @@ export default function StoryDetail({ route, navigation }: Props) {
                 {emoji} {categoryLabel}
               </Text>
             </View>
+            {(story.cluster_size ?? 1) >= 3 && (
+              <View style={{ backgroundColor: "#fff3e0", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Ionicons name="flame-outline" size={11} color="#f97316" />
+                <Text style={{ color: "#f97316", fontSize: 11, fontWeight: "700" }}>
+                  {story.cluster_size} sources
+                </Text>
+              </View>
+            )}
             <Text style={{ color: "#9aafc0", fontSize: 12 }}>
               {story.source} · {new Date(story.published_at).toLocaleDateString()}
             </Text>

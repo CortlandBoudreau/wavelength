@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<"newest" | "score">("newest");
   const [hidePosted, setHidePosted] = useState(false);
+  const [topToday, setTopToday] = useState(false);
   const [newBannerCount, setNewBannerCount] = useState(0);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,7 +61,11 @@ export default function Dashboard() {
   const loadStories = useCallback(async () => {
     try {
       setFetchError(null);
-      const result = await fetchStories({
+      const result = await fetchStories(topToday ? {
+        sort: "score",
+        since: 24,
+        limit: 8,
+      } : {
         category:   category !== "all" ? category    : undefined,
         categories: category === "all" ? categories  : undefined,
         hashtag,
@@ -71,7 +76,7 @@ export default function Dashboard() {
       const msg = err instanceof Error ? err.message : String(err);
       setFetchError(msg);
     }
-  }, [category, hashtag, sort]);
+  }, [category, hashtag, sort, topToday]);
 
   const loadTrending = useCallback(async () => {
     if (Date.now() - trendingFetchedAt.current < TRENDING_STALE_MS) return;
@@ -189,20 +194,36 @@ export default function Dashboard() {
         </View>
 
         {/* Sort + filter toggles */}
-        <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
           <Pressable
-            onPress={() => setSort((s) => s === "newest" ? "score" : "newest")}
+            onPress={() => { setTopToday((t) => !t); if (!topToday) setSort("newest"); }}
             style={{
               flexDirection: "row", alignItems: "center", gap: 5,
-              backgroundColor: sort === "score" ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+              backgroundColor: topToday ? "#f97316" : "rgba(255,255,255,0.12)",
               borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
             }}
           >
-            <Ionicons name={sort === "score" ? "flame" : "time-outline"} size={13} color={sort === "score" ? "#fff" : "#7a96ae"} />
-            <Text style={{ color: sort === "score" ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
-              {sort === "score" ? "Top Rated" : "Newest"}
+            <Ionicons name="trophy-outline" size={13} color={topToday ? "#fff" : "#7a96ae"} />
+            <Text style={{ color: topToday ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+              Top Today
             </Text>
           </Pressable>
+
+          {!topToday && (
+            <Pressable
+              onPress={() => setSort((s) => s === "newest" ? "score" : "newest")}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 5,
+                backgroundColor: sort === "score" ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+              }}
+            >
+              <Ionicons name={sort === "score" ? "flame" : "time-outline"} size={13} color={sort === "score" ? "#fff" : "#7a96ae"} />
+              <Text style={{ color: sort === "score" ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+                {sort === "score" ? "Top Rated" : "Newest"}
+              </Text>
+            </Pressable>
+          )}
 
           {isLoggedIn && isPro && (
             <Pressable
