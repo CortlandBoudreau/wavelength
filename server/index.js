@@ -112,10 +112,18 @@ app.get('/terms', (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok', db: 'ok' });
+    res.json({
+      status: 'ok',
+      db: 'ok',
+      env: process.env.NODE_ENV ?? 'development',
+    });
   } catch (e) {
     console.error('[health] DB error:', e.message);
-    res.status(503).json({ status: 'error', db: 'unreachable' });
+    res.status(503).json({
+      status: 'error',
+      db: 'unreachable',
+      env: process.env.NODE_ENV ?? 'development',
+    });
   }
 });
 
