@@ -4,12 +4,14 @@ import Landing from "../screens/Landing";
 import Interests from "../screens/Interests";
 import Login from "../screens/Login";
 import Register from "../screens/Register";
+import ForgotPassword from "../screens/ForgotPassword";
 
 export type AuthStackParamList = {
   Landing: undefined;
   Interests: undefined;
   Login: undefined;
   Register: { interests: string[] };
+  ForgotPassword: undefined;
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -21,6 +23,7 @@ export default function AuthStack() {
       <Stack.Screen name="Interests" component={Interests} />
       <Stack.Screen name="Login" component={Login} />
       <Stack.Screen name="Register" component={Register} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
     </Stack.Navigator>
   );
 }

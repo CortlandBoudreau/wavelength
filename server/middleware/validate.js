@@ -86,12 +86,23 @@ function validateNotes(req, res, next) {
   next();
 }
 
+function validatePasswordReset(req, res, next) {
+  const { email, otp, password } = req.body;
+  if (!email || !otp || !password) return err(res, 'email, otp, and password are required');
+  if (!EMAIL_RE.test(email)) return err(res, 'Invalid email address');
+  if (!/^\d{6}$/.test(String(otp))) return err(res, 'Invalid code');
+  if (password.length < 8) return err(res, 'Password must be at least 8 characters');
+  if (password.length > 128) return err(res, 'Password too long');
+  next();
+}
+
 module.exports = {
   validateUUID,
   validateRegister,
   validateLogin,
   validateProfileUpdate,
   validateNotes,
+  validatePasswordReset,
   VALID_CATEGORIES,
   VALID_ANGLES,
 };

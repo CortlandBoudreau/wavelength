@@ -69,3 +69,18 @@ export const toggleUsed = async (id: string): Promise<{ used: boolean }> => {
 export const saveStoryNotes = async (id: string, notes: string): Promise<void> => {
   await client.patch(`/stories/${id}/notes`, { notes });
 };
+
+export const generateCaption = async (id: string): Promise<string> => {
+  const { data } = await client.post<{ caption: string }>(`/stories/${id}/caption`);
+  return data.caption;
+};
+
+export const searchStories = async (q: string): Promise<FetchStoriesResult> => {
+  const { data } = await client.get<FetchStoriesResult>("/stories/search", { params: { q } });
+  return data;
+};
+
+export const fetchRelatedStories = async (id: string): Promise<Story[]> => {
+  const { data } = await client.get<{ stories: Story[] }>(`/stories/${id}/related`);
+  return data.stories;
+};

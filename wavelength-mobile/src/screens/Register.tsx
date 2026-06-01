@@ -23,9 +23,15 @@ export default function Register({ navigation, route }: Props) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = name.trim().length > 0 && email.trim().length > 0 && password.length >= 6;
+  const passwordsMatch = confirmPassword.length === 0 || password === confirmPassword;
+  const canSubmit =
+    name.trim().length > 0 &&
+    email.trim().length > 0 &&
+    password.length >= 8 &&
+    password === confirmPassword;
 
   const handleRegister = async () => {
     if (!canSubmit) return;
@@ -102,17 +108,35 @@ export default function Register({ navigation, route }: Props) {
               onChangeText={setEmail}
             />
             <TextInput
-              style={{ ...inputStyle, marginBottom: 8 }}
-              placeholder="Password (min 6 characters)"
+              style={inputStyle}
+              placeholder="Password (min 8 characters)"
+              placeholderTextColor="#6b7a8d"
+              secureTextEntry
+              returnKeyType="next"
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TextInput
+              style={{
+                ...inputStyle,
+                marginBottom: 4,
+                borderColor: !passwordsMatch ? "#e05c5c" : "#e0e7ef",
+              }}
+              placeholder="Confirm password"
               placeholderTextColor="#6b7a8d"
               secureTextEntry
               returnKeyType="done"
               onSubmitEditing={handleRegister}
-              value={password}
-              onChangeText={setPassword}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
             />
+            {!passwordsMatch && (
+              <Text style={{ color: "#e05c5c", fontSize: 12, marginBottom: 8 }}>
+                Passwords don't match
+              </Text>
+            )}
 
-            <Text style={{ color: "#5a7a94", fontSize: 12, marginBottom: 24 }}>
+            <Text style={{ color: "#5a7a94", fontSize: 12, marginBottom: 24, marginTop: 8 }}>
               You'll get a free 7-day trial — no credit card needed.
             </Text>
 

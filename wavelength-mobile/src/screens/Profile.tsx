@@ -13,9 +13,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Linking } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { usePurchase } from "../context/PurchaseContext";
-import { updateProfile } from "../api/auth";
+import { updateProfile, changePassword, deleteAccount, sendVerificationEmail, verifyEmail } from "../api/auth";
 import { sendDigest } from "../api/digest";
 import { redeemCode } from "../api/subscription";
 import { submitFeedback, type FeedbackType } from "../api/feedback";
@@ -61,7 +62,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export default function Profile() {
   const { user, logout, isGuest, guestInterests, completeOnboarding } = useAuth();
-  const { logOutRevenueCat } = usePurchase();
+  const { logOutRevenueCat, restorePurchases } = usePurchase();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [interests, setInterests] = useState<string[]>(
@@ -77,6 +78,27 @@ export default function Profile() {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("general");
   const [feedbackText, setFeedbackText] = useState("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+
+  // Change password
+  const [changePwVisible, setChangePwVisible] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
+
+  // Delete account
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deletePw, setDeletePw] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  // Email verification
+  const [verifyVisible, setVerifyVisible] = useState(false);
+  const [verifyOtp, setVerifyOtp] = useState("");
+  const [sendingVerify, setSendingVerify] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+  // Restore purchases
+  const [restoring, setRestoring] = useState(false);
 
   const sub = user
     ? { tier: user.subscription_tier, expiresAt: user.subscription_expires_at }
@@ -173,6 +195,91 @@ export default function Profile() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (newPw.length < 8 || newPw !== confirmPw) return;
+    setChangingPw(true);
+    try {
+      await changePassword(currentPw, newPw);
+      setChangePwVisible(false);
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+      Alert.alert("Password updated", "Your password has been changed.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to change password";
+      Alert.alert("Error", msg);
+    } finally {
+      setChangingPw(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account",
+      "This will permanently delete your account and all your data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Continue", style: "destructive", onPress: () => setDeleteVisible(true) },
+      ]
+    );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletePw) return;
+    setDeleting(true);
+    try {
+      await deleteAccount(deletePw);
+      await logOutRevenueCat();
+      await logout();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete account";
+      Alert.alert("Error", msg);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSendVerification = async () => {
+    setSendingVerify(true);
+    try {
+      await sendVerificationEmail();
+      setVerifyVisible(true);
+    } catch {
+      Alert.alert("Error", "Could not send verification email. Please try again.");
+    } finally {
+      setSendingVerify(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (verifyOtp.length !== 6) return;
+    setVerifyingOtp(true);
+    try {
+      await verifyEmail(verifyOtp);
+      setVerifyVisible(false);
+      setVerifyOtp("");
+      Alert.alert("Email verified ✓", "Your email address has been verified.");
+    } catch {
+      Alert.alert("Error", "Invalid or expired code. Please try again.");
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    setRestoring(true);
+    try {
+      const info = await restorePurchases();
+      const hasPro = !!info.entitlements.active["pro"];
+      Alert.alert(
+        hasPro ? "Purchases restored ✓" : "Nothing to restore",
+        hasPro ? "Your Pro subscription has been restored." : "No active purchases found for this account."
+      );
+    } catch {
+      Alert.alert("Error", "Could not restore purchases. Please try again.");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const FEEDBACK_TYPES: { value: FeedbackType; label: string; emoji: string }[] = [
     { value: "bug",     label: "Bug Report",       emoji: "🐛" },
     { value: "feature", label: "Feature Request",  emoji: "✨" },
@@ -262,6 +369,98 @@ export default function Profile() {
           </Pressable>
         </View>
       </Modal>
+      {/* ── Change Password Modal ──────────────────────────── */}
+      <Modal visible={changePwVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setChangePwVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: "#1a2a3a", padding: 24 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+            <Text style={{ color: "#ffffff", fontSize: 20, fontWeight: "800" }}>Change Password</Text>
+            <Pressable onPress={() => setChangePwVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={24} color="#7a96ae" />
+            </Pressable>
+          </View>
+          {(["Current password", "New password (min 8 chars)", "Confirm new password"] as const).map((placeholder, i) => (
+            <TextInput
+              key={placeholder}
+              style={{
+                backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1.5,
+                borderColor: i === 2 && confirmPw.length > 0 && newPw !== confirmPw ? "#e05c5c" : "rgba(255,255,255,0.15)",
+                borderRadius: 12, padding: 14, color: "#ffffff", fontSize: 15, marginBottom: 12,
+              }}
+              placeholder={placeholder} placeholderTextColor="#4a6a84"
+              secureTextEntry
+              value={i === 0 ? currentPw : i === 1 ? newPw : confirmPw}
+              onChangeText={i === 0 ? setCurrentPw : i === 1 ? setNewPw : setConfirmPw}
+            />
+          ))}
+          {confirmPw.length > 0 && newPw !== confirmPw && (
+            <Text style={{ color: "#e05c5c", fontSize: 12, marginBottom: 8 }}>Passwords don't match</Text>
+          )}
+          <Pressable
+            onPress={handleChangePassword}
+            disabled={changingPw || newPw.length < 8 || newPw !== confirmPw || !currentPw}
+            style={{ backgroundColor: newPw.length >= 8 && newPw === confirmPw && currentPw ? "#4A9EDB" : "rgba(74,158,219,0.3)", borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 8 }}
+          >
+            {changingPw ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 15 }}>Update Password</Text>}
+          </Pressable>
+        </View>
+      </Modal>
+
+      {/* ── Delete Account Modal ───────────────────────────── */}
+      <Modal visible={deleteVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDeleteVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: "#1a2a3a", padding: 24 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <Text style={{ color: "#e05c5c", fontSize: 20, fontWeight: "800" }}>Delete Account</Text>
+            <Pressable onPress={() => setDeleteVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={24} color="#7a96ae" />
+            </Pressable>
+          </View>
+          <Text style={{ color: "#7a96ae", fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+            Enter your password to permanently delete your account. All your data — stories, notes, and settings — will be removed and cannot be recovered.
+          </Text>
+          <TextInput
+            style={{ backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 14, color: "#ffffff", fontSize: 15, marginBottom: 20 }}
+            placeholder="Your password" placeholderTextColor="#4a6a84"
+            secureTextEntry value={deletePw} onChangeText={setDeletePw}
+          />
+          <Pressable
+            onPress={handleConfirmDelete}
+            disabled={deleting || !deletePw}
+            style={{ backgroundColor: deletePw ? "#b91c1c" : "rgba(185,28,28,0.3)", borderRadius: 12, paddingVertical: 15, alignItems: "center" }}
+          >
+            {deleting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 15 }}>Permanently Delete Account</Text>}
+          </Pressable>
+        </View>
+      </Modal>
+
+      {/* ── Email Verify Modal ─────────────────────────────── */}
+      <Modal visible={verifyVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setVerifyVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: "#1a2a3a", padding: 24 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <Text style={{ color: "#ffffff", fontSize: 20, fontWeight: "800" }}>Verify Email</Text>
+            <Pressable onPress={() => setVerifyVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={24} color="#7a96ae" />
+            </Pressable>
+          </View>
+          <Text style={{ color: "#7a96ae", fontSize: 14, marginBottom: 24 }}>Enter the 6-digit code we sent to {user?.email}.</Text>
+          <TextInput
+            style={{ backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 14, color: "#ffffff", fontSize: 24, letterSpacing: 8, textAlign: "center", marginBottom: 20 }}
+            placeholder="000000" placeholderTextColor="#4a6a84"
+            keyboardType="number-pad" maxLength={6}
+            value={verifyOtp} onChangeText={setVerifyOtp}
+          />
+          <Pressable
+            onPress={handleVerifyOtp}
+            disabled={verifyingOtp || verifyOtp.length !== 6}
+            style={{ backgroundColor: verifyOtp.length === 6 ? "#4A9EDB" : "rgba(74,158,219,0.3)", borderRadius: 12, paddingVertical: 15, alignItems: "center", marginBottom: 12 }}
+          >
+            {verifyingOtp ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 15 }}>Verify</Text>}
+          </Pressable>
+          <Pressable onPress={handleSendVerification} style={{ alignItems: "center", paddingVertical: 8 }}>
+            <Text style={{ color: "#4A9EDB", fontSize: 14 }}>Resend code</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
       <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["top", "left", "right"]}>
         <ScrollView
           style={{ flex: 1, backgroundColor: "#F5F0E8" }}
@@ -569,6 +768,54 @@ export default function Profile() {
               </Text>
             </Pressable>
 
+            {/* Email unverified banner */}
+            {!isGuest && user && !user.email_verified && (
+              <Pressable
+                onPress={handleSendVerification}
+                disabled={sendingVerify}
+                style={{ backgroundColor: "rgba(245,158,11,0.12)", borderWidth: 1.5, borderColor: "#f59e0b", borderRadius: 12, padding: 14, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <Ionicons name="mail-unread-outline" size={20} color="#f59e0b" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: "#f59e0b", fontWeight: "700", fontSize: 13 }}>Email not verified</Text>
+                  <Text style={{ color: "#b89040", fontSize: 12, marginTop: 2 }}>Tap to send a verification code</Text>
+                </View>
+                {sendingVerify && <ActivityIndicator color="#f59e0b" size="small" />}
+              </Pressable>
+            )}
+
+            {/* Account section — logged-in only */}
+            {!isGuest && (
+              <SectionCard>
+                <SectionLabel>Account</SectionLabel>
+                <Pressable
+                  onPress={() => setChangePwVisible(true)}
+                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#e0e7ef" }}
+                >
+                  <Ionicons name="lock-closed-outline" size={18} color="#4A9EDB" style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, color: "#1a2a3a", fontSize: 14, fontWeight: "600" }}>Change Password</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#b0bec5" />
+                </Pressable>
+                <Pressable
+                  onPress={handleRestorePurchases}
+                  disabled={restoring}
+                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#e0e7ef" }}
+                >
+                  <Ionicons name="refresh-outline" size={18} color="#4A9EDB" style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, color: "#1a2a3a", fontSize: 14, fontWeight: "600" }}>Restore Purchases</Text>
+                  {restoring ? <ActivityIndicator size="small" color="#4A9EDB" /> : <Ionicons name="chevron-forward" size={16} color="#b0bec5" />}
+                </Pressable>
+                <Pressable
+                  onPress={handleDeleteAccount}
+                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10 }}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#b91c1c" style={{ marginRight: 10 }} />
+                  <Text style={{ flex: 1, color: "#b91c1c", fontSize: 14, fontWeight: "600" }}>Delete Account</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#b0bec5" />
+                </Pressable>
+              </SectionCard>
+            )}
+
             {/* Sign out / back to auth */}
             <Pressable
               onPress={async () => { await logOutRevenueCat(); await logout(); }}
@@ -578,6 +825,17 @@ export default function Profile() {
                 {isGuest ? "Sign In / Create Account" : "Log Out"}
               </Text>
             </Pressable>
+
+            {/* Privacy & Terms links */}
+            <View style={{ flexDirection: "row", justifyContent: "center", gap: 20, paddingVertical: 12 }}>
+              <Pressable onPress={() => Linking.openURL("https://wavelength-staging.up.railway.app/privacy")}>
+                <Text style={{ color: "#5a7a94", fontSize: 12 }}>Privacy Policy</Text>
+              </Pressable>
+              <Text style={{ color: "#3a5a74", fontSize: 12 }}>·</Text>
+              <Pressable onPress={() => Linking.openURL("https://wavelength-staging.up.railway.app/terms")}>
+                <Text style={{ color: "#5a7a94", fontSize: 12 }}>Terms of Service</Text>
+              </Pressable>
+            </View>
 
           </View>
         </ScrollView>

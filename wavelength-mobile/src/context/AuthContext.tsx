@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import * as authApi from "../api/auth";
 import { updateProfile } from "../api/auth";
+import client from "../api/client";
 import type { User } from "../api/auth";
 
 const GUEST_ONBOARDED_KEY = "guest_onboarded";
@@ -33,6 +35,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading]     = useState(true);
   const [guestOnboarded, setGuestOnboarded] = useState(false);
   const [guestInterests, setGuestInterests] = useState<string[]>([]);
+  const interceptorRef = useRef<number | null>(null);
+
+  // Attach a 401 interceptor so expired tokens auto-logout with a clear message
+  useEffect(() => {
+    interceptorRef.current = client.interceptors.response.use(
+      (res) => res,
+      async (error) => {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          const stored = await SecureStore.getItemAsync("token");
+          if (stored) {
+            // Token was present but rejected — expired or revoked
+            await SecureStore.deleteItemAsync("token");
+            setToken(null);
+            setUser(null);
+            setIsGuest(false);
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => {
+      if (interceptorRef.current !== null)
+        client.interceptors.response.eject(interceptorRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {

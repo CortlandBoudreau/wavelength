@@ -84,6 +84,27 @@ CREATE INDEX IF NOT EXISTS idx_interactions_story    ON interactions(story_id);
 CREATE INDEX IF NOT EXISTS idx_interactions_fav      ON interactions(favorited) WHERE favorited = TRUE;
 CREATE INDEX IF NOT EXISTS idx_code_redemptions_user ON code_redemptions(user_id);
 
+-- ── caption cache ────────────────────────────────────────────────────────────
+ALTER TABLE summaries
+  ADD COLUMN IF NOT EXISTS caption TEXT DEFAULT NULL;
+
+-- ── email verification ────────────────────────────────────────────────────────
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS email_verified    BOOLEAN     NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS email_verify_token TEXT        DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS email_verify_sent_at TIMESTAMPTZ DEFAULT NULL;
+
+-- ── password_reset_tokens ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT        NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id);
+
 -- ── seed data ─────────────────────────────────────────────────────────────────
 INSERT INTO promo_codes (code, description, grants_tier, duration_days, max_uses)
 VALUES ('FOUNDER', 'Friends, family & early testers — lifetime access', 'lifetime', NULL, 10)

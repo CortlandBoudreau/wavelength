@@ -9,10 +9,13 @@ import {
   Linking,
   Alert,
   StyleSheet,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchStory, toggleFavorite, toggleUsed, saveStoryNotes, type Story } from "../api/stories";
+import * as Clipboard from "expo-clipboard";
+import { Share } from "react-native";
+import { fetchStory, toggleFavorite, toggleUsed, saveStoryNotes, generateCaption, fetchRelatedStories, type Story } from "../api/stories";
 import HashtagPill from "../components/HashtagPill";
 import ScoreBadge from "../components/ScoreBadge";
 import { useAuth } from "../context/AuthContext";
@@ -20,7 +23,7 @@ import { categoryEmoji, formatCategory } from "../utils/categories";
 
 interface Props {
   route: { params: { storyId: string } };
-  navigation: { goBack: () => void; replace: (screen: string) => void };
+  navigation: { goBack: () => void; replace: (screen: string, params?: object) => void };
 }
 
 const styles = StyleSheet.create({
@@ -51,12 +54,19 @@ export default function StoryDetail({ route, navigation }: Props) {
   const [story, setStory] = useState<Story | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [caption, setCaption] = useState<string | null>(null);
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const [captionVisible, setCaptionVisible] = useState(false);
+  const [copied, setCopied] = useState<"caption" | "hashtags" | null>(null);
+  const [related, setRelated] = useState<Story[]>([]);
 
   useEffect(() => {
     fetchStory(storyId)
       .then((s) => {
         setStory(s);
         setNotes(s.notes ?? "");
+        // Load related stories in background — non-fatal
+        fetchRelatedStories(storyId).then(setRelated).catch(() => {});
       })
       .catch((err: any) => {
         if (err?.response?.status === 402) {
@@ -100,6 +110,32 @@ export default function StoryDetail({ route, navigation }: Props) {
     }
   };
 
+  const handleShare = async () => {
+    if (!story) return;
+    await Share.share({ message: `${story.title}\n\n${story.url}` });
+  };
+
+  const handleGenerateCaption = async () => {
+    if (!story) return;
+    setCaptionLoading(true);
+    setCaptionVisible(true);
+    try {
+      const text = await generateCaption(story.id);
+      setCaption(text);
+    } catch {
+      Alert.alert("Error", "Could not generate caption. Please try again.");
+      setCaptionVisible(false);
+    } finally {
+      setCaptionLoading(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, type: "caption" | "hashtags") => {
+    await Clipboard.setStringAsync(text);
+    setCopied(type);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
   const { user } = useAuth();
   const isLoggedIn = !!user;
 
@@ -114,8 +150,53 @@ export default function StoryDetail({ route, navigation }: Props) {
   const emoji = categoryEmoji(story.category);
   const categoryLabel = formatCategory(story.category);
 
+  const hashtagString = (story?.hashtags ?? []).join(" ");
+
   return (
     <View style={{ flex: 1, backgroundColor: "#1a2a3a" }}>
+
+    {/* ── Caption Modal ──────────────────────────────────── */}
+    <Modal visible={captionVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCaptionVisible(false)}>
+      <View style={{ flex: 1, backgroundColor: "#1a2a3a" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, paddingBottom: 12 }}>
+          <Text style={{ color: "#ffffff", fontSize: 18, fontWeight: "800" }}>Instagram Caption</Text>
+          <Pressable onPress={() => setCaptionVisible(false)} hitSlop={8}>
+            <Ionicons name="close" size={24} color="#7a96ae" />
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
+          {captionLoading ? (
+            <View style={{ alignItems: "center", paddingVertical: 60 }}>
+              <ActivityIndicator color="#4A9EDB" size="large" />
+              <Text style={{ color: "#7a96ae", marginTop: 16, fontSize: 14 }}>Writing your caption…</Text>
+            </View>
+          ) : caption ? (
+            <>
+              <View style={{ backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                <Text style={{ color: "#e8f0f8", fontSize: 15, lineHeight: 24 }}>{caption}</Text>
+              </View>
+              <Pressable
+                onPress={() => copyToClipboard(caption, "caption")}
+                style={{ backgroundColor: copied === "caption" ? "#22c55e" : "#4A9EDB", borderRadius: 12, paddingVertical: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 12 }}
+              >
+                <Ionicons name={copied === "caption" ? "checkmark" : "copy-outline"} size={18} color="#fff" />
+                <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 15 }}>
+                  {copied === "caption" ? "Copied!" : "Copy Caption"}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleGenerateCaption}
+                style={{ borderWidth: 1.5, borderColor: "#4A9EDB", borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
+              >
+                <Text style={{ color: "#4A9EDB", fontWeight: "600", fontSize: 14 }}>Regenerate</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </ScrollView>
+      </View>
+    </Modal>
+
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F5F0E8" }}>
 
       {/* Thin nav bar — back + score only, matches dashboard header height */}
@@ -126,7 +207,12 @@ export default function StoryDetail({ route, navigation }: Props) {
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </Pressable>
-        <ScoreBadge score={story.engagement_score} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <Pressable onPress={handleShare} hitSlop={8}>
+            <Ionicons name="share-outline" size={22} color="#7ec8f0" />
+          </Pressable>
+          <ScoreBadge score={story.engagement_score} />
+        </View>
       </View>
 
       <ScrollView
@@ -182,11 +268,47 @@ export default function StoryDetail({ route, navigation }: Props) {
 
         {/* Hashtags */}
         {(story.hashtags ?? []).length > 0 && (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 14 }}>
-            {(story.hashtags ?? []).map((h) => (
-              <HashtagPill key={h} tag={h} />
-            ))}
+          <View style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 10 }}>
+              {(story.hashtags ?? []).map((h) => (
+                <HashtagPill key={h} tag={h} />
+              ))}
+            </View>
+            <Pressable
+              onPress={() => copyToClipboard(hashtagString, "hashtags")}
+              style={{
+                flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+                backgroundColor: copied === "hashtags" ? "#dcfce7" : "#f0f4f8",
+                borderWidth: 1.5, borderColor: copied === "hashtags" ? "#22c55e" : "#b0bec5",
+                borderRadius: 10, paddingVertical: 9,
+              }}
+            >
+              <Ionicons name={copied === "hashtags" ? "checkmark" : "copy-outline"} size={15} color={copied === "hashtags" ? "#22c55e" : "#6b7a8d"} />
+              <Text style={{ color: copied === "hashtags" ? "#166534" : "#6b7a8d", fontSize: 13, fontWeight: "700" }}>
+                {copied === "hashtags" ? "Copied!" : "Copy Hashtags"}
+              </Text>
+            </Pressable>
           </View>
+        )}
+
+        {/* Generate caption — logged-in only */}
+        {isLoggedIn && (
+          <Pressable
+            onPress={handleGenerateCaption}
+            disabled={captionLoading}
+            style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+              backgroundColor: "#4A9EDB", borderRadius: 12, paddingVertical: 14, marginBottom: 14,
+            }}
+          >
+            {captionLoading
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Ionicons name="sparkles-outline" size={18} color="#fff" />
+            }
+            <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 15 }}>
+              {captionLoading ? "Writing caption…" : "Generate Caption"}
+            </Text>
+          </Pressable>
         )}
 
         {/* Action buttons — logged-in only */}
@@ -279,6 +401,29 @@ export default function StoryDetail({ route, navigation }: Props) {
             <Text style={{ color: "#6b7a8d", fontSize: 13, textAlign: "center", lineHeight: 19 }}>
               Sign in to save, mark as posted, and add notes.
             </Text>
+          </View>
+        )}
+
+        {/* Related stories */}
+        {related.length > 0 && (
+          <View style={[styles.card, { marginTop: 4 }]}>
+            <Text style={styles.sectionLabel}>MORE LIKE THIS</Text>
+            {related.map((r, i) => (
+              <Pressable
+                key={r.id}
+                onPress={() => navigation.replace("StoryDetail", { storyId: r.id })}
+                style={{
+                  paddingVertical: 10,
+                  borderTopWidth: i === 0 ? 0 : 1,
+                  borderTopColor: "#f0f4f8",
+                }}
+              >
+                <Text style={{ color: "#0d1b2a", fontWeight: "700", fontSize: 13, lineHeight: 18, marginBottom: 3 }} numberOfLines={2}>
+                  {r.title}
+                </Text>
+                <Text style={{ color: "#9aafc0", fontSize: 11 }}>{r.source}</Text>
+              </Pressable>
+            ))}
           </View>
         )}
 

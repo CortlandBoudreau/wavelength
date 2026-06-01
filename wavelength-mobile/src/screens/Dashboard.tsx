@@ -5,12 +5,13 @@ import {
   FlatList,
   RefreshControl,
   Pressable,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { fetchStories, type Story, type Category } from "../api/stories";
+import { fetchStories, searchStories, type Story, type Category } from "../api/stories";
 import { fetchTrendingHashtags } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
 import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
@@ -40,7 +41,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchActive, setSearchActive] = useState(false);
+  const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
   const trendingFetchedAt = useRef<number>(0);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadStories = useCallback(async () => {
     try {
@@ -83,8 +88,24 @@ export default function Dashboard() {
       }
       await incrementGuestStoryViews();
     }
+    setViewedIds((prev) => new Set(prev).add(story.id));
     navigation.navigate("StoryDetail", { storyId: story.id });
   }, [isGuest, navigation]);
+
+  // Debounced search
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (!text.trim()) { setSearchActive(false); loadStories(); return; }
+    searchTimeout.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const result = await searchStories(text.trim());
+        setStories(result.stories);
+        setSearchActive(true);
+      } catch { /* ignore */ } finally { setLoading(false); }
+    }, 400);
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -95,18 +116,28 @@ export default function Dashboard() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["top", "left", "right"]}>
       {/* Header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 8,
-          backgroundColor: "#1a2a3a",
-        }}
-      >
-        <WaveLogo size="md" />
+      <View style={{ backgroundColor: "#1a2a3a", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <WaveLogo size="md" />
+        </View>
+        {/* Search bar */}
+        <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+          <Ionicons name="search-outline" size={16} color="#7a96ae" />
+          <TextInput
+            style={{ flex: 1, color: "#ffffff", fontSize: 14 }}
+            placeholder="Search stories…"
+            placeholderTextColor="#5a7a94"
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => { setSearchQuery(""); setSearchActive(false); loadStories(); }} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color="#5a7a94" />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Category tabs */}
@@ -153,6 +184,7 @@ export default function Dashboard() {
             <StoryCard
               story={item}
               onPress={handleStoryPress}
+              viewed={viewedIds.has(item.id)}
             />
           )}
           refreshControl={

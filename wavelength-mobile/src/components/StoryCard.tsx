@@ -8,6 +8,7 @@ import type { Story } from "../api/stories";
 interface Props {
   story: Story;
   onPress: (story: Story) => void;
+  viewed?: boolean;
 }
 
 function relativeTime(iso: string): string {
@@ -18,19 +19,19 @@ function relativeTime(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-export default function StoryCard({ story, onPress }: Props) {
+export default function StoryCard({ story, onPress, viewed = false }: Props) {
   const emoji = categoryEmoji(story.category);
 
   return (
     // Outer View owns the horizontal margin — never swallowed by FlatList
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, viewed && styles.wrapperViewed]}>
       <Pressable
         onPress={() => onPress(story)}
-        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+        style={({ pressed }) => [styles.card, viewed && styles.cardViewed, pressed && styles.cardPressed]}
       >
         {/* Title + score */}
         <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={[styles.title, viewed && styles.titleViewed]} numberOfLines={2}>
             {story.title}
           </Text>
           <ScoreBadge score={story.engagement_score} />
@@ -71,6 +72,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 0,
   },
+  wrapperViewed: {
+    opacity: 0.6,
+  },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 14,
@@ -87,6 +91,9 @@ const styles = StyleSheet.create({
   cardPressed: {
     opacity: 0.92,
   },
+  cardViewed: {
+    backgroundColor: "#f8f9fa",
+  },
   titleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -99,6 +106,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     paddingRight: 10,
+  },
+  titleViewed: {
+    color: "#6b7a8d",
+    fontWeight: "600",
   },
   summary: {
     color: "#5a6a7a",

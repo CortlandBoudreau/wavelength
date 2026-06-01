@@ -5,7 +5,7 @@ const { requireAuth } = require('../middleware/auth');
 const { optionalAuth } = require('../middleware/optionalAuth');
 const { validateUUID, validateNotes, VALID_CATEGORIES } = require('../middleware/validate');
 const { runAggregation } = require('../services/newsAggregator');
-const { summarizeUnsummarized } = require('../services/claudeSummarizer');
+const { summarizeUnsummarized, generateCaption } = require('../services/claudeSummarizer');
 const { clusterRecentStories } = require('../services/clusterStories');
 
 const FREE_DAILY_LIMIT = 3;
@@ -52,6 +52,35 @@ router.get('/', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('[GET /stories]', err.message);
     res.status(500).json({ error: 'Failed to load stories' });
+  }
+});
+
+// GET /api/stories/search?q=keyword — full-text search across title + summary
+router.get('/search', optionalAuth, async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  if (!q || q.length < 2) return res.json({ stories: [] });
+  if (q.length > 100) return res.status(400).json({ error: 'Query too long' });
+
+  try {
+    const userId = req.user?.id || null;
+    const { rows } = await pool.query(`
+      SELECT s.*, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.engagement_score,
+             i.favorited, i.notes, i.tags, i.used
+      FROM stories s
+      INNER JOIN summaries sum ON sum.story_id = s.id
+      LEFT JOIN interactions i ON i.story_id = s.id AND ($2::uuid IS NULL OR i.user_id = $2)
+      WHERE s.deleted_at IS NULL
+        AND (
+          s.title    ILIKE $1
+          OR sum.summary ILIKE $1
+        )
+      ORDER BY s.published_at DESC
+      LIMIT 40
+    `, [`%${q}%`, userId]);
+    res.json({ stories: rows });
+  } catch (err) {
+    console.error('[GET /stories/search]', err.message);
+    res.status(500).json({ error: 'Search failed' });
   }
 });
 
@@ -138,6 +167,67 @@ router.post('/refresh', (req, res, next) => {
   } catch (err) {
     console.error('[POST /stories/refresh]', err.message);
     res.status(500).json({ error: 'Aggregation failed' });
+  }
+});
+
+// GET /api/stories/:id/related — stories in the same cluster
+router.get('/:id/related', optionalAuth, async (req, res) => {
+  if (!validateUUID(req.params.id, res)) return;
+  try {
+    const userId = req.user?.id || null;
+    // Get the cluster_id for this story
+    const { rows: [story] } = await pool.query(
+      'SELECT cluster_id, category FROM stories WHERE id = $1 AND deleted_at IS NULL',
+      [req.params.id]
+    );
+    if (!story) return res.status(404).json({ error: 'Not found' });
+
+    // If no cluster, fall back to same category
+    const { rows } = story.cluster_id
+      ? await pool.query(`
+          SELECT s.id, s.title, s.source, s.published_at, s.category,
+                 sum.summary, sum.engagement_score, sum.angle,
+                 i.favorited, i.used
+          FROM stories s
+          INNER JOIN summaries sum ON sum.story_id = s.id
+          LEFT JOIN interactions i ON i.story_id = s.id AND ($3::uuid IS NULL OR i.user_id = $3)
+          WHERE s.cluster_id = $1 AND s.id <> $2 AND s.deleted_at IS NULL
+          ORDER BY s.published_at DESC LIMIT 5
+        `, [story.cluster_id, req.params.id, userId])
+      : await pool.query(`
+          SELECT s.id, s.title, s.source, s.published_at, s.category,
+                 sum.summary, sum.engagement_score, sum.angle,
+                 i.favorited, i.used
+          FROM stories s
+          INNER JOIN summaries sum ON sum.story_id = s.id
+          LEFT JOIN interactions i ON i.story_id = s.id AND ($3::uuid IS NULL OR i.user_id = $3)
+          WHERE s.category = $1 AND s.id <> $2 AND s.deleted_at IS NULL
+          ORDER BY s.published_at DESC LIMIT 5
+        `, [story.category, req.params.id, userId]);
+
+    res.json({ stories: rows });
+  } catch (err) {
+    console.error('[GET /stories/:id/related]', err.message);
+    res.status(500).json({ error: 'Failed to load related stories' });
+  }
+});
+
+// POST /api/stories/:id/caption — generate (or return cached) Instagram caption
+router.post('/:id/caption', requireAuth, async (req, res) => {
+  if (!validateUUID(req.params.id, res)) return;
+  try {
+    const { rows } = await pool.query(`
+      SELECT s.id, s.title, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.caption
+      FROM stories s
+      INNER JOIN summaries sum ON sum.story_id = s.id
+      WHERE s.id = $1 AND s.deleted_at IS NULL
+    `, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    const caption = await generateCaption(rows[0]);
+    res.json({ caption });
+  } catch (err) {
+    console.error('[POST /stories/:id/caption]', err.message);
+    res.status(500).json({ error: 'Failed to generate caption' });
   }
 });
 

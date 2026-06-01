@@ -86,6 +86,29 @@ app.use('/api/trending', require('./routes/trending'));
 app.use('/api/sources', require('./routes/sources'));
 app.use('/api/feedback', require('./routes/feedback'));
 
+// Static legal pages — required for Play Store submission
+app.get('/privacy', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>WaveLength Privacy Policy</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.7;color:#1a2a3a}h1{color:#0f1e2d}a{color:#4A9EDB}</style></head>
+  <body><h1>Privacy Policy</h1><p><strong>Last updated: ${new Date().getFullYear()}</strong></p>
+  <p>WaveLength ("we", "us") collects your email address and name when you register, and stores science story preferences you set in the app. We use this to personalise your feed and send email digests you request.</p>
+  <p>We do not sell your data to third parties. We use SendGrid to deliver emails and RevenueCat to manage subscriptions. Your payment details are handled entirely by Google Play — we never see your card information.</p>
+  <p>You can delete your account and all associated data at any time from the Profile screen in the app.</p>
+  <p>For questions, email us at <a href="mailto:cortlanddb@gmail.com">cortlanddb@gmail.com</a>.</p>
+  </body></html>`);
+});
+
+app.get('/terms', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>WaveLength Terms of Service</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.7;color:#1a2a3a}h1{color:#0f1e2d}</style></head>
+  <body><h1>Terms of Service</h1><p><strong>Last updated: ${new Date().getFullYear()}</strong></p>
+  <p>By using WaveLength you agree to use the app for lawful purposes only. The app provides AI-summarised science news for informational and content-creation purposes — summaries may not be perfectly accurate and should not be treated as scientific fact without verification.</p>
+  <p>Pro subscriptions are billed monthly through Google Play. Cancellations take effect at the end of the current billing period. Refunds are subject to Google Play's refund policy.</p>
+  <p>We reserve the right to suspend accounts that abuse the service. We may update these terms at any time; continued use constitutes acceptance.</p>
+  <p>For questions, email us at <a href="mailto:cortlanddb@gmail.com">cortlanddb@gmail.com</a>.</p>
+  </body></html>`);
+});
+
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');

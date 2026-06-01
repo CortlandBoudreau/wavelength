@@ -11,6 +11,7 @@ const migrations = [
   'schema.sql',
   'migration-all.sql',
   'migration-free-tier.sql',
+  'migration-password-reset.sql',
 ];
 
 (async () => {

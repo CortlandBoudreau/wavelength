@@ -86,7 +86,7 @@ export default function Login({ navigation }: Props) {
               onChangeText={setEmail}
             />
             <TextInput
-              style={{ ...inputStyle, marginBottom: 24 }}
+              style={{ ...inputStyle, marginBottom: 8 }}
               placeholder="Password"
               placeholderTextColor="#6b7a8d"
               secureTextEntry
@@ -95,6 +95,13 @@ export default function Login({ navigation }: Props) {
               value={password}
               onChangeText={setPassword}
             />
+
+            <Pressable
+              onPress={() => navigation.navigate("ForgotPassword")}
+              style={{ alignItems: "flex-end", paddingBottom: 20 }}
+            >
+              <Text style={{ color: "#4A9EDB", fontSize: 13 }}>Forgot password?</Text>
+            </Pressable>
 
             <Pressable
               onPress={() => navigation.navigate("Interests")}
