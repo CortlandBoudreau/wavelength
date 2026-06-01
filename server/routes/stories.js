@@ -15,6 +15,7 @@ const FREE_DAILY_LIMIT = 3;
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { favorited, limit = 50, offset = 0 } = req.query;
+    const sortByScore = req.query.sort === 'score';
     const category = VALID_CATEGORIES.has(req.query.category) ? req.query.category : null;
     const categories = req.query.categories
       ? req.query.categories.split(',').filter((c) => VALID_CATEGORIES.has(c))
@@ -44,7 +45,7 @@ router.get('/', optionalAuth, async (req, res) => {
       INNER JOIN summaries sum ON sum.story_id = s.id
       LEFT JOIN interactions i ON i.story_id = s.id AND ($1::uuid IS NULL OR i.user_id = $1)
       WHERE ${conditions.join(' AND ')}
-      ORDER BY s.published_at DESC
+      ORDER BY ${sortByScore ? 'sum.engagement_score DESC, s.published_at DESC' : 's.published_at DESC'}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, safeLimit, safeOffset]);
 

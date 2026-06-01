@@ -34,6 +34,7 @@ const TRENDING_STALE_MS = 5 * 60 * 1000;
 export default function Dashboard() {
   const navigation = useNavigation<DashboardNav>();
   const { isGuest, user, guestInterests } = useAuth();
+  const isLoggedIn = !!user;
   const [stories, setStories] = useState<Story[]>([]);
   // Use the interests the user picked during onboarding as the category tabs
   const categories: Category[] = (user?.interests ?? guestInterests) as Category[];
@@ -46,6 +47,8 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<"newest" | "score">("newest");
+  const [hidePosted, setHidePosted] = useState(false);
   const [newBannerCount, setNewBannerCount] = useState(0);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,13 +62,14 @@ export default function Dashboard() {
         category:   category !== "all" ? category    : undefined,
         categories: category === "all" ? categories  : undefined,
         hashtag,
+        sort:       sort === "score" ? "score" : undefined,
       });
       setStories(deduplicateClusters(result.stories));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setFetchError(msg);
     }
-  }, [category, hashtag]);
+  }, [category, hashtag, sort]);
 
   const loadTrending = useCallback(async () => {
     if (Date.now() - trendingFetchedAt.current < TRENDING_STALE_MS) return;
@@ -181,6 +185,39 @@ export default function Dashboard() {
             </Pressable>
           )}
         </View>
+
+        {/* Sort + filter toggles */}
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+          <Pressable
+            onPress={() => setSort((s) => s === "newest" ? "score" : "newest")}
+            style={{
+              flexDirection: "row", alignItems: "center", gap: 5,
+              backgroundColor: sort === "score" ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+              borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+            }}
+          >
+            <Ionicons name={sort === "score" ? "flame" : "time-outline"} size={13} color={sort === "score" ? "#fff" : "#7a96ae"} />
+            <Text style={{ color: sort === "score" ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+              {sort === "score" ? "Top Rated" : "Newest"}
+            </Text>
+          </Pressable>
+
+          {isLoggedIn && (
+            <Pressable
+              onPress={() => setHidePosted((h) => !h)}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 5,
+                backgroundColor: hidePosted ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+              }}
+            >
+              <Ionicons name={hidePosted ? "eye-off" : "eye-outline"} size={13} color={hidePosted ? "#fff" : "#7a96ae"} />
+              <Text style={{ color: hidePosted ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+                Hide Posted
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Category tabs */}
@@ -221,7 +258,7 @@ export default function Dashboard() {
       ) : (
         <FlatList
           style={{ backgroundColor: "#F5F0E8" }}
-          data={stories}
+          data={hidePosted ? stories.filter((s) => !s.used) : stories}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <StoryCard
