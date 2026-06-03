@@ -12,10 +12,17 @@ const FREE_DAILY_LIMIT = 3;
 
 // GET /api/stories — public, attaches user interactions if logged in
 // No feed cap — all stories visible to everyone. Free tier gates the detail view.
+//
+// Personalization (logged-in users only):
+//   Category affinity is computed from views/favorites/posted in the last 30 days.
+//   Categories where the user has < 20% of their max engagement only surface stories
+//   with engagement_score >= 7 ("high-traction only") unless a specific category
+//   filter is active or ?personalized=false is passed.
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { favorited, limit = 50, offset = 0 } = req.query;
     const sortByScore = req.query.sort === 'score';
+    const personalized = req.query.personalized !== 'false'; // default on
     // ?since=N  — only return stories published within the last N hours (max 168 = 7 days)
     const sinceHours = req.query.since ? Math.min(Math.max(parseInt(req.query.since) || 0, 1), 168) : null;
     const category = VALID_CATEGORIES.has(req.query.category) ? req.query.category : null;
@@ -25,6 +32,9 @@ router.get('/', optionalAuth, async (req, res) => {
     const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
     const safeOffset = Math.max(parseInt(offset) || 0, 0);
     const userId = req.user?.id || null;
+
+    // Personalization only kicks in when: logged in, no specific category filter, and not disabled
+    const usePersonalization = userId && personalized && !category && !categories;
 
     const conditions = ['s.deleted_at IS NULL'];
     const params = [userId];
@@ -43,7 +53,51 @@ router.get('/', optionalAuth, async (req, res) => {
       conditions.push(`s.published_at > NOW() - INTERVAL '${sinceHours} hours'`);
     }
 
+    // Personalization gate: low-affinity categories only show high-traction stories.
+    // Affinity = (views*1 + favorites*3 + posted*5) per category, last 30 days.
+    // Categories with < 20% of the user's max category score are suppressed below score 7.
+    // If the user has no interaction data yet, the CTE returns nothing → no filtering.
+    const personalizedClause = usePersonalization ? `
+      AND (
+        -- No affinity data for this category → unfiltered (new user or new category)
+        NOT EXISTS (
+          SELECT 1 FROM user_affinity_scores uas WHERE uas.category = s.category
+        )
+        OR (
+          SELECT uas.affinity_score FROM user_affinity_scores uas
+          WHERE uas.category = s.category
+        ) >= 0.20
+        -- Always show high-traction stories regardless of affinity
+        OR sum.engagement_score >= 7
+      )
+    ` : '';
+
+    const affinityCTE = usePersonalization ? `
+      WITH raw_affinity AS (
+        SELECT
+          s_aff.category,
+          SUM(
+            CASE WHEN i_aff.viewed_at IS NOT NULL THEN 1 ELSE 0 END +
+            CASE WHEN i_aff.favorited     THEN 3 ELSE 0 END +
+            CASE WHEN i_aff.used          THEN 5 ELSE 0 END
+          )::float AS score
+        FROM interactions i_aff
+        JOIN stories s_aff ON s_aff.id = i_aff.story_id
+        WHERE i_aff.user_id = $1
+          AND i_aff.viewed_at > NOW() - INTERVAL '30 days'
+        GROUP BY s_aff.category
+      ),
+      max_score AS (
+        SELECT GREATEST(MAX(score), 1) AS max_score FROM raw_affinity
+      ),
+      user_affinity_scores AS (
+        SELECT r.category, (r.score / m.max_score)::float AS affinity_score
+        FROM raw_affinity r, max_score m
+      )
+    ` : '';
+
     const { rows } = await pool.query(`
+      ${affinityCTE}
       SELECT s.*, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.engagement_score,
              i.favorited, i.notes, i.tags, i.used,
              CASE WHEN s.cluster_id IS NOT NULL THEN (
@@ -54,11 +108,12 @@ router.get('/', optionalAuth, async (req, res) => {
       INNER JOIN summaries sum ON sum.story_id = s.id
       LEFT JOIN interactions i ON i.story_id = s.id AND ($1::uuid IS NULL OR i.user_id = $1)
       WHERE ${conditions.join(' AND ')}
+      ${personalizedClause}
       ORDER BY ${sortByScore ? 'sum.engagement_score DESC, s.published_at DESC' : 's.published_at DESC'}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, safeLimit, safeOffset]);
 
-    res.json({ stories: rows });
+    res.json({ stories: rows, personalized: !!usePersonalization });
   } catch (err) {
     console.error('[GET /stories]', err.message);
     res.status(500).json({ error: 'Failed to load stories' });
@@ -142,6 +197,17 @@ router.get('/:id', optionalAuth, async (req, res) => {
       }
     }
     // ────────────────────────────────────────────────────────────────────────
+
+    // Record the view for personalization signal (fire-and-forget, non-fatal)
+    if (userId) {
+      pool.query(
+        `INSERT INTO interactions (story_id, user_id, viewed_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (story_id, user_id)
+         DO UPDATE SET viewed_at = NOW()`,
+        [req.params.id, userId]
+      ).catch((e) => console.warn('[view-track] upsert failed:', e.message));
+    }
 
     const { rows } = await pool.query(`
       SELECT s.*, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.engagement_score,

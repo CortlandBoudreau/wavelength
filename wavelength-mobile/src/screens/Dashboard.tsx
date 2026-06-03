@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [sort, setSort] = useState<"newest" | "score">("newest");
   const [hidePosted, setHidePosted] = useState(false);
   const [topToday, setTopToday] = useState(false);
+  const [isPersonalized, setIsPersonalized] = useState(false);
   const [newBannerCount, setNewBannerCount] = useState(0);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,6 +73,7 @@ export default function Dashboard() {
         sort:       sort === "score" ? "score" : undefined,
       });
       setStories(deduplicateClusters(result.stories));
+      setIsPersonalized(result.personalized ?? false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setFetchError(msg);
@@ -223,6 +225,20 @@ export default function Dashboard() {
                 {sort === "score" ? "Top Rated" : "Newest"}
               </Text>
             </Pressable>
+          )}
+
+          {/* Personalization indicator — shown when the feed is being tailored */}
+          {isLoggedIn && isPersonalized && !topToday && (
+            <View style={{
+              flexDirection: "row", alignItems: "center", gap: 4,
+              backgroundColor: "rgba(99,102,241,0.18)",
+              borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
+            }}>
+              <Ionicons name="sparkles" size={12} color="#a78bfa" />
+              <Text style={{ color: "#a78bfa", fontSize: 11, fontWeight: "700" }}>
+                Personalized
+              </Text>
+            </View>
           )}
 
           {isLoggedIn && isPro && (
