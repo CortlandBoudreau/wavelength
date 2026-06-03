@@ -35,7 +35,7 @@ router.post('/register', validateRegister, async (req, res) => {
 
     // Send verification email (non-fatal if it fails)
     try {
-      const otp = String(Math.floor(100000 + Math.random() * 900000));
+      const otp = String(crypto.randomInt(100000, 1000000));
       const tokenHash = crypto.createHash('sha256').update(otp).digest('hex');
       await pool.query(
         'UPDATE users SET email_verify_token = $1, email_verify_sent_at = NOW() WHERE id = $2',
@@ -181,7 +181,7 @@ router.post('/send-verification', requireAuth, async (req, res) => {
     if (lastSent && Date.now() - new Date(lastSent).getTime() < 2 * 60 * 1000)
       return res.status(429).json({ error: 'Please wait before requesting another verification email' });
 
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otp = String(crypto.randomInt(100000, 1000000));
     const tokenHash = crypto.createHash('sha256').update(otp).digest('hex');
     await pool.query(
       'UPDATE users SET email_verify_token = $1, email_verify_sent_at = NOW() WHERE id = $2',
@@ -212,11 +212,17 @@ router.post('/verify-email', requireAuth, async (req, res) => {
   const tokenHash = crypto.createHash('sha256').update(String(otp)).digest('hex');
   try {
     const { rows } = await pool.query(
-      'SELECT email_verify_token, email_verified FROM users WHERE id = $1',
+      'SELECT email_verify_token, email_verified, email_verify_sent_at FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     if (rows[0].email_verified) return res.json({ ok: true });
+
+    // Enforce 1-hour expiry on the verification token
+    const sentAt = rows[0].email_verify_sent_at;
+    if (!sentAt || Date.now() - new Date(sentAt).getTime() > 60 * 60 * 1000)
+      return res.status(400).json({ error: 'Code expired — please request a new verification email' });
+
     if (rows[0].email_verify_token !== tokenHash)
       return res.status(400).json({ error: 'Invalid or expired code' });
 
@@ -245,7 +251,7 @@ router.post('/forgot-password', async (req, res) => {
     if (!rows.length) return res.json({ ok: true });
 
     const userId = rows[0].id;
-    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+    const otp = String(crypto.randomInt(100000, 1000000)); // 6 digits
     const tokenHash = crypto.createHash('sha256').update(otp).digest('hex');
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
 

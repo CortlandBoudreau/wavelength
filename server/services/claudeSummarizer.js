@@ -271,4 +271,8 @@ Suggested hashtags: ${hashtagLine}`;
   return caption;
 }
 
-module.exports = { summarizeUnsummarized, summarizeStory, generateCaption };
+module.exports = {
+  summarizeUnsummarized, summarizeStory, generateCaption,
+  // Exported for unit tests only
+  _test: { detectSourceType, sanitizeForPrompt, parseClaudeResponse, buildThinContentSummary },
+};

@@ -11,6 +11,7 @@ export interface Story {
   published_at: string;
   category: string;
   cluster_id: string | null;
+  cluster_size?: number;
   summary: string;
   bullets: string[];
   angle: string;
@@ -32,6 +33,8 @@ export interface FetchStoriesParams {
   categories?: Category[];  // multi-category filter for the "All" tab
   sort?: string;
   hashtag?: string;
+  since?: number;   // only return stories from the last N hours
+  limit?: number;
 }
 
 export interface FetchStoriesResult {

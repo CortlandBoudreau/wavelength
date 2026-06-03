@@ -51,6 +51,12 @@ export default function StoryCard({ story, onPress, viewed = false }: Props) {
                 {emoji} {formatCategory(story.category)}
               </Text>
             </View>
+            {(story.cluster_size ?? 1) >= 3 && (
+              <View style={styles.clusterBadge}>
+                <Ionicons name="flame-outline" size={10} color="#f97316" />
+                <Text style={styles.clusterBadgeText}>{story.cluster_size}</Text>
+              </View>
+            )}
             {story.favorited && <Ionicons name="star" size={14} color="#f59e0b" />}
             {story.used && <Ionicons name="checkmark-circle" size={14} color="#22c55e" />}
           </View>
@@ -121,6 +127,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  clusterBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#fff3e0",
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clusterBadgeText: {
+    color: "#f97316",
+    fontSize: 10,
+    fontWeight: "700",
   },
   footerLeft: {
     flexDirection: "row",

@@ -6,7 +6,9 @@ import {
   RefreshControl,
   Pressable,
   TextInput,
+  Animated,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -16,6 +18,7 @@ import { fetchTrendingHashtags } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
 import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
 import { useAuth } from "../context/AuthContext";
+import { isProUser } from "../utils/proCheck";
 import StoryCard from "../components/StoryCard";
 import SkeletonCard from "../components/SkeletonCard";
 import CategoryTabs from "../components/CategoryTabs";
@@ -32,6 +35,8 @@ const TRENDING_STALE_MS = 5 * 60 * 1000;
 export default function Dashboard() {
   const navigation = useNavigation<DashboardNav>();
   const { isGuest, user, guestInterests } = useAuth();
+  const isLoggedIn = !!user;
+  const isPro = isProUser(user);
   const [stories, setStories] = useState<Story[]>([]);
   // Use the interests the user picked during onboarding as the category tabs
   const categories: Category[] = (user?.interests ?? guestInterests) as Category[];
@@ -44,23 +49,34 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<"newest" | "score">("newest");
+  const [hidePosted, setHidePosted] = useState(false);
+  const [topToday, setTopToday] = useState(false);
+  const [newBannerCount, setNewBannerCount] = useState(0);
+  const bannerOpacity = useRef(new Animated.Value(0)).current;
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trendingFetchedAt = useRef<number>(0);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadStories = useCallback(async () => {
     try {
       setFetchError(null);
-      const result = await fetchStories({
+      const result = await fetchStories(topToday ? {
+        sort: "score",
+        since: 24,
+        limit: 8,
+      } : {
         category:   category !== "all" ? category    : undefined,
         categories: category === "all" ? categories  : undefined,
         hashtag,
+        sort:       sort === "score" ? "score" : undefined,
       });
       setStories(deduplicateClusters(result.stories));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setFetchError(msg);
     }
-  }, [category, hashtag]);
+  }, [category, hashtag, sort, topToday]);
 
   const loadTrending = useCallback(async () => {
     if (Date.now() - trendingFetchedAt.current < TRENDING_STALE_MS) return;
@@ -107,14 +123,52 @@ export default function Dashboard() {
     }, 400);
   };
 
+  const showNewBanner = (count: number) => {
+    if (count <= 0) return;
+    setNewBannerCount(count);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.sequence([
+      Animated.timing(bannerOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(2800),
+      Animated.timing(bannerOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
+    const prevIds = new Set(stories.map((s) => s.id));
     await loadStories();
+    // Count how many IDs we have after that aren't in the old set
+    // We read `stories` via a callback to get the post-load value
+    setStories((latest) => {
+      const added = latest.filter((s) => !prevIds.has(s.id)).length;
+      if (added > 0) showNewBanner(added);
+      return latest;
+    });
     setRefreshing(false);
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["top", "left", "right"]}>
+      {/* New stories banner */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute", top: 60, left: 0, right: 0, zIndex: 99,
+          alignItems: "center", opacity: bannerOpacity,
+        }}
+      >
+        <View style={{
+          backgroundColor: "#22c55e", borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8,
+          flexDirection: "row", alignItems: "center", gap: 6,
+          shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, elevation: 6,
+        }}>
+          <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 13 }}>
+            ✦ {newBannerCount} new {newBannerCount === 1 ? "story" : "stories"} added
+          </Text>
+        </View>
+      </Animated.View>
+
       {/* Header */}
       <View style={{ backgroundColor: "#1a2a3a", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -135,6 +189,55 @@ export default function Dashboard() {
           {searchQuery.length > 0 && (
             <Pressable onPress={() => { setSearchQuery(""); setSearchActive(false); loadStories(); }} hitSlop={8}>
               <Ionicons name="close-circle" size={16} color="#5a7a94" />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Sort + filter toggles */}
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <Pressable
+            onPress={() => { setTopToday((t) => !t); if (!topToday) setSort("newest"); }}
+            style={{
+              flexDirection: "row", alignItems: "center", gap: 5,
+              backgroundColor: topToday ? "#f97316" : "rgba(255,255,255,0.12)",
+              borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+            }}
+          >
+            <Ionicons name="trophy-outline" size={13} color={topToday ? "#fff" : "#7a96ae"} />
+            <Text style={{ color: topToday ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+              Top Today
+            </Text>
+          </Pressable>
+
+          {!topToday && (
+            <Pressable
+              onPress={() => setSort((s) => s === "newest" ? "score" : "newest")}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 5,
+                backgroundColor: sort === "score" ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+              }}
+            >
+              <Ionicons name={sort === "score" ? "flame" : "time-outline"} size={13} color={sort === "score" ? "#fff" : "#7a96ae"} />
+              <Text style={{ color: sort === "score" ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+                {sort === "score" ? "Top Rated" : "Newest"}
+              </Text>
+            </Pressable>
+          )}
+
+          {isLoggedIn && isPro && (
+            <Pressable
+              onPress={() => setHidePosted((h) => !h)}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 5,
+                backgroundColor: hidePosted ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+              }}
+            >
+              <Ionicons name={hidePosted ? "eye-off" : "eye-outline"} size={13} color={hidePosted ? "#fff" : "#7a96ae"} />
+              <Text style={{ color: hidePosted ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+                Hide Posted
+              </Text>
             </Pressable>
           )}
         </View>
@@ -178,7 +281,7 @@ export default function Dashboard() {
       ) : (
         <FlatList
           style={{ backgroundColor: "#F5F0E8" }}
-          data={stories}
+          data={hidePosted && isPro ? stories.filter((s) => !s.used) : stories}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <StoryCard

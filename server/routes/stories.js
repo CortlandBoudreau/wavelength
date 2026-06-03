@@ -15,6 +15,9 @@ const FREE_DAILY_LIMIT = 3;
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { favorited, limit = 50, offset = 0 } = req.query;
+    const sortByScore = req.query.sort === 'score';
+    // ?since=N  — only return stories published within the last N hours (max 168 = 7 days)
+    const sinceHours = req.query.since ? Math.min(Math.max(parseInt(req.query.since) || 0, 1), 168) : null;
     const category = VALID_CATEGORIES.has(req.query.category) ? req.query.category : null;
     const categories = req.query.categories
       ? req.query.categories.split(',').filter((c) => VALID_CATEGORIES.has(c))
@@ -36,15 +39,22 @@ router.get('/', optionalAuth, async (req, res) => {
     if (favorited === 'true' && userId) {
       conditions.push(`i.favorited = TRUE`);
     }
+    if (sinceHours) {
+      conditions.push(`s.published_at > NOW() - INTERVAL '${sinceHours} hours'`);
+    }
 
     const { rows } = await pool.query(`
       SELECT s.*, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.engagement_score,
-             i.favorited, i.notes, i.tags, i.used
+             i.favorited, i.notes, i.tags, i.used,
+             CASE WHEN s.cluster_id IS NOT NULL THEN (
+               SELECT COUNT(*) FROM stories s2
+               WHERE s2.cluster_id = s.cluster_id AND s2.deleted_at IS NULL
+             ) ELSE 1 END AS cluster_size
       FROM stories s
       INNER JOIN summaries sum ON sum.story_id = s.id
       LEFT JOIN interactions i ON i.story_id = s.id AND ($1::uuid IS NULL OR i.user_id = $1)
       WHERE ${conditions.join(' AND ')}
-      ORDER BY s.published_at DESC
+      ORDER BY ${sortByScore ? 'sum.engagement_score DESC, s.published_at DESC' : 's.published_at DESC'}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, safeLimit, safeOffset]);
 
@@ -135,7 +145,11 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     const { rows } = await pool.query(`
       SELECT s.*, sum.summary, sum.bullets, sum.angle, sum.hashtags, sum.engagement_score,
-             i.favorited, i.notes, i.tags, i.used
+             i.favorited, i.notes, i.tags, i.used,
+             CASE WHEN s.cluster_id IS NOT NULL THEN (
+               SELECT COUNT(*) FROM stories s2
+               WHERE s2.cluster_id = s.cluster_id AND s2.deleted_at IS NULL
+             ) ELSE 1 END AS cluster_size
       FROM stories s
       INNER JOIN summaries sum ON sum.story_id = s.id
       LEFT JOIN interactions i ON i.story_id = s.id AND ($2::uuid IS NULL OR i.user_id = $2)

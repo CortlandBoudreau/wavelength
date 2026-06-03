@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as authApi from "../api/auth";
 import { updateProfile } from "../api/auth";
+import { scheduleDailyDigest } from "../utils/notifications";
 import client from "../api/client";
 import type { User } from "../api/auth";
 
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setToken(stored);
           const me = await authApi.getMe();
           setUser(me);
+          scheduleDailyDigest(); // non-blocking, non-fatal
         }
         // Restore guest onboarding state
         const onboarded = await AsyncStorage.getItem(GUEST_ONBOARDED_KEY);
@@ -95,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(t);
     setUser(u);
     setIsGuest(false);
+    scheduleDailyDigest();
   };
 
   const register = async (email: string, name: string, password: string, interests?: string[]) => {
@@ -115,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
     }
     setIsGuest(false);
+    scheduleDailyDigest();
   };
 
   const loginAsGuest = () => {

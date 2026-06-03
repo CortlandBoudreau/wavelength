@@ -14,11 +14,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Haptics from "expo-haptics";
+import * as Speech from "expo-speech";
 import { Share } from "react-native";
 import { fetchStory, toggleFavorite, toggleUsed, saveStoryNotes, generateCaption, fetchRelatedStories, type Story } from "../api/stories";
 import HashtagPill from "../components/HashtagPill";
 import ScoreBadge from "../components/ScoreBadge";
 import { useAuth } from "../context/AuthContext";
+import { isProUser } from "../utils/proCheck";
 import { categoryEmoji, formatCategory } from "../utils/categories";
 
 interface Props {
@@ -57,15 +60,15 @@ export default function StoryDetail({ route, navigation }: Props) {
   const [caption, setCaption] = useState<string | null>(null);
   const [captionLoading, setCaptionLoading] = useState(false);
   const [captionVisible, setCaptionVisible] = useState(false);
-  const [copied, setCopied] = useState<"caption" | "hashtags" | null>(null);
+  const [copied, setCopied] = useState<"caption" | "hashtags" | "package" | null>(null);
   const [related, setRelated] = useState<Story[]>([]);
+  const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     fetchStory(storyId)
       .then((s) => {
         setStory(s);
         setNotes(s.notes ?? "");
-        // Load related stories in background — non-fatal
         fetchRelatedStories(storyId).then(setRelated).catch(() => {});
       })
       .catch((err: any) => {
@@ -73,10 +76,30 @@ export default function StoryDetail({ route, navigation }: Props) {
           navigation.replace("Paywall");
         }
       });
+    // Stop speech when leaving the screen
+    return () => { Speech.stop(); };
   }, [storyId]);
+
+  const handleSpeak = async () => {
+    if (speaking) {
+      await Speech.stop();
+      setSpeaking(false);
+      return;
+    }
+    if (!story?.summary) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSpeaking(true);
+    Speech.speak(story.summary, {
+      rate: 0.95,
+      onDone: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+      onStopped: () => setSpeaking(false),
+    });
+  };
 
   const toggle = async (field: "favorited" | "used") => {
     if (!story) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // Optimistic update so the button responds instantly
     const prev = story;
     setStory({ ...story, [field]: !story[field] });
@@ -117,6 +140,7 @@ export default function StoryDetail({ route, navigation }: Props) {
 
   const handleGenerateCaption = async () => {
     if (!story) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCaptionLoading(true);
     setCaptionVisible(true);
     try {
@@ -130,14 +154,22 @@ export default function StoryDetail({ route, navigation }: Props) {
     }
   };
 
-  const copyToClipboard = async (text: string, type: "caption" | "hashtags") => {
+  const copyToClipboard = async (text: string, type: "caption" | "hashtags" | "package") => {
     await Clipboard.setStringAsync(text);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCopied(type);
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const handleCopyPackage = () => {
+    if (!story) return;
+    const pkg = `${story.title}\n\n${story.summary}\n\n${hashtagString}`;
+    copyToClipboard(pkg, "package");
+  };
+
   const { user } = useAuth();
   const isLoggedIn = !!user;
+  const isPro = isProUser(user);
 
   if (!story) {
     return (
@@ -208,6 +240,9 @@ export default function StoryDetail({ route, navigation }: Props) {
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <Pressable onPress={handleSpeak} hitSlop={8}>
+            <Ionicons name={speaking ? "stop-circle-outline" : "volume-medium-outline"} size={22} color={speaking ? "#4A9EDB" : "#7ec8f0"} />
+          </Pressable>
           <Pressable onPress={handleShare} hitSlop={8}>
             <Ionicons name="share-outline" size={22} color="#7ec8f0" />
           </Pressable>
@@ -228,6 +263,14 @@ export default function StoryDetail({ route, navigation }: Props) {
                 {emoji} {categoryLabel}
               </Text>
             </View>
+            {(story.cluster_size ?? 1) >= 3 && (
+              <View style={{ backgroundColor: "#fff3e0", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Ionicons name="flame-outline" size={11} color="#f97316" />
+                <Text style={{ color: "#f97316", fontSize: 11, fontWeight: "700" }}>
+                  {story.cluster_size} sources
+                </Text>
+              </View>
+            )}
             <Text style={{ color: "#9aafc0", fontSize: 12 }}>
               {story.source} · {new Date(story.published_at).toLocaleDateString()}
             </Text>
@@ -291,8 +334,24 @@ export default function StoryDetail({ route, navigation }: Props) {
           </View>
         )}
 
-        {/* Generate caption — logged-in only */}
-        {isLoggedIn && (
+        {/* Copy full package — always available */}
+        <Pressable
+          onPress={handleCopyPackage}
+          style={{
+            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+            backgroundColor: copied === "package" ? "#dcfce7" : "#ffffff",
+            borderRadius: 12, paddingVertical: 13, marginBottom: 10,
+            borderWidth: 1.5, borderColor: copied === "package" ? "#22c55e" : "#b0bec5",
+          }}
+        >
+          <Ionicons name={copied === "package" ? "checkmark" : "layers-outline"} size={16} color={copied === "package" ? "#22c55e" : "#6b7a8d"} />
+          <Text style={{ color: copied === "package" ? "#166534" : "#6b7a8d", fontSize: 14, fontWeight: "700" }}>
+            {copied === "package" ? "Copied!" : "Copy Title + Summary + Hashtags"}
+          </Text>
+        </Pressable>
+
+        {/* Generate caption */}
+        {isLoggedIn && isPro ? (
           <Pressable
             onPress={handleGenerateCaption}
             disabled={captionLoading}
@@ -309,10 +368,25 @@ export default function StoryDetail({ route, navigation }: Props) {
               {captionLoading ? "Writing caption…" : "Generate Caption"}
             </Text>
           </Pressable>
-        )}
+        ) : isLoggedIn ? (
+          <Pressable
+            onPress={() => navigation.replace("Paywall")}
+            style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+              backgroundColor: "#f0f4f8", borderRadius: 12, paddingVertical: 14, marginBottom: 14,
+              borderWidth: 1.5, borderColor: "#b0bec5",
+            }}
+          >
+            <Ionicons name="lock-closed-outline" size={16} color="#9aafc0" />
+            <Text style={{ color: "#9aafc0", fontWeight: "700", fontSize: 15 }}>Generate Caption</Text>
+            <View style={{ backgroundColor: "#4A9EDB", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+              <Text style={{ color: "#fff", fontSize: 10, fontWeight: "800" }}>PRO</Text>
+            </View>
+          </Pressable>
+        ) : null}
 
-        {/* Action buttons — logged-in only */}
-        {isLoggedIn ? (
+        {/* Action buttons — pro only */}
+        {isLoggedIn && isPro ? (
           <>
             <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
               <Pressable
@@ -395,7 +469,23 @@ export default function StoryDetail({ route, navigation }: Props) {
               </Pressable>
             </View>
           </>
+        ) : isLoggedIn ? (
+          // Logged in but free — pro upsell
+          <View style={[styles.card, { alignItems: "center", paddingVertical: 20 }]}>
+            <Ionicons name="sparkles-outline" size={26} color="#4A9EDB" style={{ marginBottom: 8 }} />
+            <Text style={{ color: "#1a2a3a", fontWeight: "800", fontSize: 15, marginBottom: 6 }}>Pro Feature</Text>
+            <Text style={{ color: "#6b7a8d", fontSize: 13, textAlign: "center", lineHeight: 19, marginBottom: 16 }}>
+              Upgrade to save stories, mark as posted, add notes, and generate captions.
+            </Text>
+            <Pressable
+              onPress={() => navigation.replace("Paywall")}
+              style={{ backgroundColor: "#4A9EDB", borderRadius: 10, paddingVertical: 11, paddingHorizontal: 28 }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>Upgrade to Pro</Text>
+            </Pressable>
+          </View>
         ) : (
+          // Not logged in
           <View style={[styles.card, { alignItems: "center" }]}>
             <Ionicons name="lock-closed-outline" size={22} color="#b0bec5" style={{ marginBottom: 8 }} />
             <Text style={{ color: "#6b7a8d", fontSize: 13, textAlign: "center", lineHeight: 19 }}>
