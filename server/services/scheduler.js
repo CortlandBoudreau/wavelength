@@ -2,6 +2,8 @@ const cron = require('node-cron');
 const { runAggregation } = require('./newsAggregator');
 const { summarizeUnsummarized } = require('./claudeSummarizer');
 const { clusterRecentStories } = require('./clusterStories');
+const { updateDecayedScores } = require('./freshnessDecay');
+const { detectAndNotify, expireOldTopics } = require('./topicBursts');
 const { sendDigest } = require('./emailDigest');
 const pool = require('../db/pool');
 
@@ -24,6 +26,9 @@ async function softDeleteOldStories() {
 }
 
 function startScheduler() {
+  // ── Aggregation pipeline (3× daily) ────────────────────────────────────────
+  // Each run: fetch → summarize → cluster → refresh decay scores → detect bursts
+
   // 2:00 AM — overnight + international coverage
   cron.schedule('0 2 * * *', async () => {
     console.log('[Scheduler] Running overnight aggregation...');
@@ -31,6 +36,8 @@ function startScheduler() {
       await runAggregation();
       await summarizeUnsummarized();
       await clusterRecentStories();
+      await updateDecayedScores();
+      await detectAndNotify();
     } catch (err) {
       console.error('[Scheduler] Aggregation error:', err);
     }
@@ -43,6 +50,8 @@ function startScheduler() {
       await runAggregation();
       await summarizeUnsummarized();
       await clusterRecentStories();
+      await updateDecayedScores();
+      await detectAndNotify();
     } catch (err) {
       console.error('[Scheduler] Aggregation error:', err);
     }
@@ -55,6 +64,8 @@ function startScheduler() {
       await runAggregation();
       await summarizeUnsummarized();
       await clusterRecentStories();
+      await updateDecayedScores();
+      await detectAndNotify();
     } catch (err) {
       console.error('[Scheduler] Aggregation error:', err);
     }
@@ -70,11 +81,12 @@ function startScheduler() {
     }
   });
 
-  // 3:00 AM daily — soft-delete stories older than 14 days
+  // 3:00 AM daily — soft-delete old stories + expire old topic moments
   cron.schedule('0 3 * * *', async () => {
     console.log('[Scheduler] Running story cleanup...');
     try {
       await softDeleteOldStories();
+      await expireOldTopics();
     } catch (err) {
       console.error('[Scheduler] Cleanup error:', err);
     }

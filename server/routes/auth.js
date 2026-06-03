@@ -284,6 +284,26 @@ router.post('/forgot-password', async (req, res) => {
   res.json({ ok: true });
 });
 
+// PATCH /api/auth/push-token — store (or clear) the Expo push token for this user.
+// Called by the mobile app after notification permission is granted.
+router.patch('/push-token', requireAuth, async (req, res) => {
+  const { push_token } = req.body;
+  // push_token may be a string (register) or null (deregister on logout)
+  if (push_token !== null && push_token !== undefined && typeof push_token !== 'string')
+    return res.status(400).json({ error: 'push_token must be a string or null' });
+
+  try {
+    await pool.query(
+      'UPDATE users SET push_token = $1 WHERE id = $2',
+      [push_token ?? null, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[PATCH /auth/push-token]', err.message);
+    res.status(500).json({ error: 'Failed to save push token' });
+  }
+});
+
 // POST /api/auth/google — sign in / register via Google OAuth
 // Accepts the access_token from expo-auth-session; verifies it with Google's
 // userinfo endpoint, then finds or creates the user account.

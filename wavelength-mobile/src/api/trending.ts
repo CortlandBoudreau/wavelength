@@ -14,3 +14,18 @@ export const fetchTrendingHashtags = async (
   });
   return data;
 };
+
+export interface TopicMoment {
+  id: string;
+  topic_label: string;
+  story_count: number;
+  story_ids: string[];
+  first_seen_at: string;
+  expires_at: string;
+  top_story: { id: string; title: string; category: string } | null;
+}
+
+export const fetchTopicMoments = async (): Promise<TopicMoment[]> => {
+  const { data } = await client.get<{ topics: TopicMoment[] }>("/trending/topics");
+  return data.topics ?? [];
+};

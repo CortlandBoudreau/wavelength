@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as authApi from "../api/auth";
 import { updateProfile } from "../api/auth";
-import { scheduleDailyDigest } from "../utils/notifications";
+import { scheduleDailyDigest, deregisterPushToken } from "../utils/notifications";
 import client from "../api/client";
 import type { User } from "../api/auth";
 
@@ -138,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    await deregisterPushToken().catch(() => {}); // best-effort before token is cleared
     await SecureStore.deleteItemAsync("token");
     setUser(null);
     setToken(null);

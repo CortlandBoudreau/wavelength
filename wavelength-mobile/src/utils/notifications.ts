@@ -1,7 +1,9 @@
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import client from "../api/client";
 
 const SCHEDULED_KEY = "wl_daily_notif_v1";
+const PUSH_TOKEN_KEY = "wl_push_token_v1";
 
 // Show notifications while app is in foreground too
 Notifications.setNotificationHandler({
@@ -42,9 +44,44 @@ export async function scheduleDailyDigest(): Promise<void> {
     });
 
     await AsyncStorage.setItem(SCHEDULED_KEY, "true");
+
+    // Register the Expo push token with the server so topic burst alerts can
+    // be delivered as server-initiated push notifications.
+    await registerPushToken();
   } catch {
     // Never crash the app over a missed notification
   }
+}
+
+/**
+ * Register (or refresh) the device's Expo push token with the server.
+ * Safe to call multiple times — uses AsyncStorage to avoid redundant requests.
+ * Must be called while the user is authenticated (needs a valid JWT in client).
+ */
+export async function registerPushToken(): Promise<void> {
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const token = tokenData.data;
+
+    // Only POST if the token changed since last time
+    const stored = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    if (stored === token) return;
+
+    await client.patch("/auth/push-token", { push_token: token });
+    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
+  } catch {
+    // Non-fatal — topic bursts will just not have push for this user
+  }
+}
+
+/**
+ * Deregister push token from the server (call on logout).
+ */
+export async function deregisterPushToken(): Promise<void> {
+  try {
+    await client.patch("/auth/push-token", { push_token: null });
+    await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
+  } catch {}
 }
 
 /**

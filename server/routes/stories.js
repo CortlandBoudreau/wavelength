@@ -109,7 +109,9 @@ router.get('/', optionalAuth, async (req, res) => {
       LEFT JOIN interactions i ON i.story_id = s.id AND ($1::uuid IS NULL OR i.user_id = $1)
       WHERE ${conditions.join(' AND ')}
       ${personalizedClause}
-      ORDER BY ${sortByScore ? 'sum.engagement_score DESC, s.published_at DESC' : 's.published_at DESC'}
+      ORDER BY ${sortByScore
+        ? 'COALESCE(sum.decayed_score, sum.engagement_score) DESC, s.published_at DESC'
+        : 's.published_at DESC'}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, safeLimit, safeOffset]);
 
