@@ -284,6 +284,61 @@ router.post('/forgot-password', async (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /api/auth/google — sign in / register via Google OAuth
+// Accepts the access_token from expo-auth-session; verifies it with Google's
+// userinfo endpoint, then finds or creates the user account.
+router.post('/google', async (req, res) => {
+  const { access_token } = req.body;
+  if (!access_token || typeof access_token !== 'string')
+    return res.status(400).json({ error: 'access_token required' });
+
+  try {
+    // Verify by calling Google's userinfo endpoint — only a valid token gets data back
+    const gRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (!gRes.ok) return res.status(401).json({ error: 'Invalid Google token' });
+
+    const { sub: googleId, email, name, email_verified } = await gRes.json();
+    if (!email) return res.status(401).json({ error: 'Google account has no email' });
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
+    let user = rows[0];
+
+    if (!user) {
+      // New user — create with 7-day trial (same as email register)
+      const trialEnds = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const fallbackName = name ?? normalizedEmail.split('@')[0];
+      const result = await pool.query(
+        `INSERT INTO users
+           (email, name, google_id, email_verified, subscription_tier, subscription_expires_at)
+         VALUES ($1, $2, $3, $4, 'trial', $5)
+         RETURNING id, email, name, interests, hashtag_includes, hashtag_excludes,
+                   subscription_tier, subscription_expires_at, email_verified`,
+        [normalizedEmail, fallbackName, googleId, !!email_verified, trialEnds]
+      );
+      user = result.rows[0];
+    } else {
+      // Existing account — link google_id + mark email verified if not already
+      if (!user.google_id) {
+        await pool.query(
+          'UPDATE users SET google_id = $1, email_verified = TRUE WHERE id = $2',
+          [googleId, user.id]
+        );
+      }
+      // Strip sensitive fields before responding
+      const { password_hash, email_verify_token, email_verify_sent_at, ...safe } = user;
+      user = safe;
+    }
+
+    res.json({ user, token: makeToken(user) });
+  } catch (err) {
+    console.error('[POST /auth/google]', err.message);
+    res.status(500).json({ error: 'Google sign-in failed' });
+  }
+});
+
 // POST /api/auth/reset-password
 router.post('/reset-password', validatePasswordReset, async (req, res) => {
   const { email, otp, password } = req.body;

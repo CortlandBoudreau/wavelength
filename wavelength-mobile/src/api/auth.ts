@@ -77,3 +77,11 @@ export const sendVerificationEmail = async (): Promise<void> => {
 export const verifyEmail = async (otp: string): Promise<void> => {
   await client.post("/auth/verify-email", { otp });
 };
+
+/** Sign in / register using a Google OAuth access token from expo-auth-session. */
+export const loginWithGoogle = async (accessToken: string): Promise<AuthResponse> => {
+  const { data } = await client.post<AuthResponse>("/auth/google", {
+    access_token: accessToken,
+  });
+  return data;
+};
