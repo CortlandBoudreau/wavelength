@@ -284,6 +284,67 @@ router.post('/forgot-password', async (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/auth/notification-preferences
+router.get('/notification-preferences', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT notification_prefs FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0].notification_prefs ?? {});
+  } catch (err) {
+    console.error('[GET /auth/notification-preferences]', err.message);
+    res.status(500).json({ error: 'Failed to load preferences' });
+  }
+});
+
+// PATCH /api/auth/notification-preferences
+// Accepts a partial object — only the keys present are merged in.
+router.patch('/notification-preferences', requireAuth, async (req, res) => {
+  const ALLOWED_KEYS = new Set([
+    'daily_digest', 'daily_digest_hour', 'topic_alerts',
+    'posting_reminder', 'posting_reminder_days',
+  ]);
+
+  const patch = req.body;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+    return res.status(400).json({ error: 'Body must be an object' });
+
+  const unknown = Object.keys(patch).filter((k) => !ALLOWED_KEYS.has(k));
+  if (unknown.length)
+    return res.status(400).json({ error: `Unknown preference key(s): ${unknown.join(', ')}` });
+
+  // Type-check each accepted field
+  if ('daily_digest'          in patch && typeof patch.daily_digest          !== 'boolean') return res.status(400).json({ error: 'daily_digest must be boolean' });
+  if ('topic_alerts'          in patch && typeof patch.topic_alerts          !== 'boolean') return res.status(400).json({ error: 'topic_alerts must be boolean' });
+  if ('posting_reminder'      in patch && typeof patch.posting_reminder      !== 'boolean') return res.status(400).json({ error: 'posting_reminder must be boolean' });
+  if ('daily_digest_hour'     in patch) {
+    const h = patch.daily_digest_hour;
+    if (typeof h !== 'number' || !Number.isInteger(h) || h < 0 || h > 23)
+      return res.status(400).json({ error: 'daily_digest_hour must be an integer 0–23' });
+  }
+  if ('posting_reminder_days' in patch) {
+    const d = patch.posting_reminder_days;
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < 1 || d > 30)
+      return res.status(400).json({ error: 'posting_reminder_days must be an integer 1–30' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users
+       SET notification_prefs = notification_prefs || $1::jsonb
+       WHERE id = $2
+       RETURNING notification_prefs`,
+      [JSON.stringify(patch), req.user.id]
+    );
+    res.json(rows[0].notification_prefs);
+  } catch (err) {
+    console.error('[PATCH /auth/notification-preferences]', err.message);
+    res.status(500).json({ error: 'Failed to save preferences' });
+  }
+});
+
 // PATCH /api/auth/push-token — store (or clear) the Expo push token for this user.
 // Called by the mobile app after notification permission is granted.
 router.patch('/push-token', requireAuth, async (req, res) => {

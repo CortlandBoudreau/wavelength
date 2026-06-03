@@ -4,6 +4,7 @@ const { summarizeUnsummarized } = require('./claudeSummarizer');
 const { clusterRecentStories } = require('./clusterStories');
 const { updateDecayedScores } = require('./freshnessDecay');
 const { detectAndNotify, expireOldTopics } = require('./topicBursts');
+const { sendPostingReminders } = require('./postingReminder');
 const { sendDigest } = require('./emailDigest');
 const pool = require('../db/pool');
 
@@ -78,6 +79,16 @@ function startScheduler() {
       await sendDigest();
     } catch (err) {
       console.error('[Scheduler] Digest error:', err);
+    }
+  });
+
+  // 8:00 PM daily — posting reminder (after the day's content window has passed)
+  cron.schedule('0 20 * * *', async () => {
+    console.log('[Scheduler] Sending posting reminders...');
+    try {
+      await sendPostingReminders();
+    } catch (err) {
+      console.error('[Scheduler] Posting reminder error:', err);
     }
   });
 

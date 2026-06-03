@@ -177,9 +177,11 @@ async function detectAndNotify() {
 
     console.log(`[TopicBursts] New burst: "${topicLabel}" (${storyCount} stories)`);
 
-    // 9. Send push notification to all users with a push token
+    // 9. Send push notification to users who have a push token AND have topic_alerts enabled
     const { rows: tokenRows } = await pool.query(
-      `SELECT push_token FROM users WHERE push_token IS NOT NULL`
+      `SELECT push_token FROM users
+       WHERE push_token IS NOT NULL
+         AND (notification_prefs->>'topic_alerts')::boolean IS NOT FALSE`
     );
     const pushTokens = tokenRows.map((r) => r.push_token);
 
