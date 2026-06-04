@@ -84,6 +84,7 @@ router.get('/', optionalAuth, async (req, res) => {
         FROM interactions i_aff
         JOIN stories s_aff ON s_aff.id = i_aff.story_id
         WHERE i_aff.user_id = $1
+          AND i_aff.viewed_at IS NOT NULL
           AND i_aff.viewed_at > NOW() - INTERVAL '30 days'
         GROUP BY s_aff.category
       ),
@@ -110,7 +111,7 @@ router.get('/', optionalAuth, async (req, res) => {
       WHERE ${conditions.join(' AND ')}
       ${personalizedClause}
       ORDER BY ${sortByScore
-        ? 'COALESCE(sum.decayed_score, sum.engagement_score) DESC, s.published_at DESC'
+        ? 'sum.engagement_score DESC, s.published_at DESC'
         : 's.published_at DESC'}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `, [...params, safeLimit, safeOffset]);
