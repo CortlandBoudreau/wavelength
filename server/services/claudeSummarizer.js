@@ -253,7 +253,7 @@ Angle: ${story.angle ?? 'educational'}
 Suggested hashtags: ${hashtagLine}`;
 
   const message = await client.messages.create({
-    model: 'claude-haiku-4-5',
+    model: 'claude-haiku-4-6',
     max_tokens: 500,
     system: CAPTION_SYSTEM,
     messages: [{ role: 'user', content: userMessage }],
