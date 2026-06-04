@@ -115,8 +115,8 @@ export default function ForgotPassword({ navigation }: Props) {
       color: "#4A9EDB",
     },
     password: {
-      icon:  "lock-closed" as const,
-      label: "Reset password",
+      icon:  "checkmark-circle" as const,
+      label: "Set new password",
       color: "#22c55e",
     },
   } as const;
@@ -187,14 +187,14 @@ export default function ForgotPassword({ navigation }: Props) {
               <Text style={{ color: "#ffffff", fontSize: 22, fontWeight: "800", textAlign: "center" }}>
                 {step === "email"    ? "Forgot password?" :
                  step === "otp"      ? "Check your email" :
-                 "New password"}
+                 "Set a new password"}
               </Text>
               <Text style={{ color: "#7a96ae", fontSize: 14, marginTop: 6, textAlign: "center", lineHeight: 20 }}>
                 {step === "email"
                   ? "Enter your email and we'll send\na 6-digit reset code."
                   : step === "otp"
                   ? `We sent a code to\n${email}`
-                  : "Choose a new password\n(at least 8 characters)"}
+                  : "Enter and confirm your new password.\nMust be at least 8 characters."}
               </Text>
             </View>
 
