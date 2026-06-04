@@ -278,7 +278,12 @@ router.post('/forgot-password', async (req, res) => {
       html: `<p>Your WaveLength password reset code is:</p><h2 style="letter-spacing:8px">${otp}</h2><p>This code expires in 15 minutes. If you didn't request a reset, you can ignore this email.</p>`,
     });
   } catch (err) {
-    console.error('[POST /auth/forgot-password]', err.message);
+    // Always return 200 to prevent email enumeration — but log the real error
+    console.error('[POST /auth/forgot-password] FAILED to send reset email:', err.message);
+    if (err.response?.body) {
+      // SendGrid error detail
+      console.error('[POST /auth/forgot-password] SendGrid error:', JSON.stringify(err.response.body));
+    }
   }
 
   res.json({ ok: true });
