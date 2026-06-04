@@ -1,8 +1,10 @@
 import client from "./client";
 
 export interface TrendingHashtag {
-  hashtag: string;
-  count: number;
+  hashtag:     string;
+  count:       number;
+  velocity:    number;  // recent_count / baseline_daily_avg — higher = more trending
+  is_trending: boolean; // true when velocity >= 3×
 }
 
 export const fetchTrendingHashtags = async (

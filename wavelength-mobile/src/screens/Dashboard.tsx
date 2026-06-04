@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { fetchStories, searchStories, type Story, type Category } from "../api/stories";
-import { fetchTrendingHashtags, fetchTopicMoments, type TopicMoment } from "../api/trending";
+import { fetchTrendingHashtags, fetchTopicMoments, type TopicMoment, type TrendingHashtag } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
 import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
 import { useAuth } from "../context/AuthContext";
@@ -42,7 +42,7 @@ export default function Dashboard() {
   const categories: Category[] = (user?.interests ?? guestInterests) as Category[];
   const [category, setCategory] = useState<Category | "all">("all");
   const [hashtag, setHashtag] = useState<string | undefined>();
-  const [trending, setTrending] = useState<string[]>([]);
+  const [trending, setTrending] = useState<TrendingHashtag[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -88,7 +88,7 @@ export default function Dashboard() {
         fetchTrendingHashtags(),
         fetchTopicMoments().catch(() => []),
       ]);
-      setTrending(hashtagData.map((t) => t.hashtag));
+      setTrending(hashtagData);
       setTopics(topicData);
       trendingFetchedAt.current = Date.now();
     } catch {
@@ -279,11 +279,12 @@ export default function Dashboard() {
             horizontal
             showsHorizontalScrollIndicator={false}
             data={trending.slice(0, 10)}
-            keyExtractor={(item) => item}
+            keyExtractor={(item) => item.hashtag}
             renderItem={({ item }) => (
               <HashtagPill
-                tag={item}
-                active={hashtag === item}
+                tag={item.hashtag}
+                active={hashtag === item.hashtag}
+                isTrending={item.is_trending}
                 onPress={(t) => setHashtag((prev) => (prev === t ? undefined : t))}
               />
             )}
