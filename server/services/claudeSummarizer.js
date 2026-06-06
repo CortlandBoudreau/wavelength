@@ -164,8 +164,11 @@ async function summarizeStory(story, engagementProfile) {
   }
 
   // ── Claude summarization ──────────────────────────────────────────────────
+  // Default to Haiku — fast, cheap, and sufficient for structured JSON extraction.
+  // Override with SUMMARIZER_MODEL env var if you need higher quality (e.g. claude-sonnet-4-6).
+  const summarizerModel = process.env.SUMMARIZER_MODEL ?? 'claude-haiku-4-6';
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: summarizerModel,
     max_tokens: 700,
     system: buildSystemPrompt(engagementProfile, sourceType),
     messages: [{ role: 'user', content: buildUserMessage(story) }],

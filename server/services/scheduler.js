@@ -27,12 +27,17 @@ async function softDeleteOldStories() {
 }
 
 function startScheduler() {
-  // ── Aggregation pipeline (3× daily) ────────────────────────────────────────
-  // Each run: fetch → summarize → cluster → refresh decay scores → detect bursts
+  // ── Aggregation pipeline ────────────────────────────────────────────────────
+  // AGGREGATION_RUNS_PER_DAY controls how many times per day the full pipeline
+  // runs (fetch → summarize → cluster → decay → burst detection).
+  //   1 = once daily at 10:00 AM  (staging / dev — cheapest)
+  //   2 = 10:00 AM + 4:00 PM      (moderate)
+  //   3 = 2:00 AM + 10:00 AM + 4:00 PM (production default)
+  const runsPerDay = parseInt(process.env.AGGREGATION_RUNS_PER_DAY ?? '3', 10);
+  console.log(`[Scheduler] Aggregation runs per day: ${runsPerDay}`);
 
-  // 2:00 AM — overnight + international coverage
-  cron.schedule('0 2 * * *', async () => {
-    console.log('[Scheduler] Running overnight aggregation...');
+  async function runPipeline(label) {
+    console.log(`[Scheduler] Running ${label} aggregation...`);
     try {
       await runAggregation();
       await summarizeUnsummarized();
@@ -42,35 +47,20 @@ function startScheduler() {
     } catch (err) {
       console.error('[Scheduler] Aggregation error:', err);
     }
-  });
+  }
 
-  // 10:00 AM — morning news cycle
-  cron.schedule('0 10 * * *', async () => {
-    console.log('[Scheduler] Running morning aggregation...');
-    try {
-      await runAggregation();
-      await summarizeUnsummarized();
-      await clusterRecentStories();
-      await updateDecayedScores();
-      await detectAndNotify();
-    } catch (err) {
-      console.error('[Scheduler] Aggregation error:', err);
-    }
-  });
+  // 2:00 AM — overnight + international coverage (runs=3 only)
+  if (runsPerDay >= 3) {
+    cron.schedule('0 2 * * *', () => runPipeline('overnight'));
+  }
 
-  // 4:00 PM — afternoon publications
-  cron.schedule('0 16 * * *', async () => {
-    console.log('[Scheduler] Running afternoon aggregation...');
-    try {
-      await runAggregation();
-      await summarizeUnsummarized();
-      await clusterRecentStories();
-      await updateDecayedScores();
-      await detectAndNotify();
-    } catch (err) {
-      console.error('[Scheduler] Aggregation error:', err);
-    }
-  });
+  // 10:00 AM — morning news cycle (always runs)
+  cron.schedule('0 10 * * *', () => runPipeline('morning'));
+
+  // 4:00 PM — afternoon publications (runs=2 or 3)
+  if (runsPerDay >= 2) {
+    cron.schedule('0 16 * * *', () => runPipeline('afternoon'));
+  }
 
   // 8:00 AM daily — send email digest
   cron.schedule('0 8 * * *', async () => {
