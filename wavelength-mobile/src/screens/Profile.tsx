@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { sendDigest } from "../api/digest";
 import { redeemCode } from "../api/subscription";
 import { submitFeedback, type FeedbackType } from "../api/feedback";
 import { ALL_CATEGORIES, categoryEmoji, formatCategory } from "../utils/categories";
+import { useNotificationPrefs } from "../hooks/useNotificationPrefs";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 function SectionCard({ children }: { children: React.ReactNode }) {
@@ -63,6 +64,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export default function Profile() {
   const { user, logout, isGuest, guestInterests, completeOnboarding } = useAuth();
   const { logOutRevenueCat, restorePurchases } = usePurchase();
+  const { prefs: notifPrefs, saving: notifSaving, savePrefs } = useNotificationPrefs(!isGuest && !!user);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [interests, setInterests] = useState<string[]>(
@@ -728,6 +730,170 @@ export default function Profile() {
                 </Text>
               )}
             </Pressable>
+
+            {/* Notifications — logged-in only */}
+            {!isGuest && (
+              <SectionCard>
+                <SectionLabel>Notifications</SectionLabel>
+
+                {/* ── Daily digest ─────────────────────────────────── */}
+                <View style={{ marginBottom: 18 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: notifPrefs.daily_digest ? 10 : 0 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: "#1a2a3a", fontSize: 14, fontWeight: "600" }}>Daily digest</Text>
+                      <Text style={{ color: "#6b7a8d", fontSize: 12, marginTop: 2 }}>
+                        Morning reminder with fresh stories
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => savePrefs({ daily_digest: !notifPrefs.daily_digest })}
+                      disabled={notifSaving}
+                      style={{
+                        width: 44, height: 26, borderRadius: 13,
+                        backgroundColor: notifPrefs.daily_digest ? "#4A9EDB" : "#d0d8e4",
+                        justifyContent: "center",
+                        paddingHorizontal: 3,
+                      }}
+                    >
+                      <View style={{
+                        width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
+                        alignSelf: notifPrefs.daily_digest ? "flex-end" : "flex-start",
+                        shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 2,
+                        elevation: 2,
+                      }} />
+                    </Pressable>
+                  </View>
+
+                  {/* Time picker — only shown when daily digest is on */}
+                  {notifPrefs.daily_digest && (
+                    <View>
+                      <Text style={{ color: "#6b7a8d", fontSize: 11, fontWeight: "600", letterSpacing: 0.5, marginBottom: 8 }}>
+                        REMIND ME AT
+                      </Text>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {[6, 7, 8, 9, 10, 12].map((h) => {
+                          const label = h < 12 ? `${h}am` : "12pm";
+                          const active = notifPrefs.daily_digest_hour === h;
+                          return (
+                            <Pressable
+                              key={h}
+                              onPress={() => savePrefs({ daily_digest_hour: h })}
+                              disabled={notifSaving}
+                              style={{
+                                paddingHorizontal: 14, paddingVertical: 7,
+                                borderRadius: 20, borderWidth: 1.5,
+                                backgroundColor: active ? "#4A9EDB" : "#f0f4f8",
+                                borderColor: active ? "#4A9EDB" : "#d0d8e4",
+                              }}
+                            >
+                              <Text style={{ color: active ? "#fff" : "#4a6a84", fontSize: 13, fontWeight: "600" }}>
+                                {label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* Divider */}
+                <View style={{ height: 1, backgroundColor: "#e0e7ef", marginBottom: 18 }} />
+
+                {/* ── Topic moment alerts ──────────────────────────── */}
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 18 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#1a2a3a", fontSize: 14, fontWeight: "600" }}>Topic moment alerts</Text>
+                    <Text style={{ color: "#6b7a8d", fontSize: 12, marginTop: 2 }}>
+                      Alert when 4+ stories break on the same topic
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => savePrefs({ topic_alerts: !notifPrefs.topic_alerts })}
+                    disabled={notifSaving}
+                    style={{
+                      width: 44, height: 26, borderRadius: 13,
+                      backgroundColor: notifPrefs.topic_alerts ? "#f97316" : "#d0d8e4",
+                      justifyContent: "center", paddingHorizontal: 3,
+                    }}
+                  >
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
+                      alignSelf: notifPrefs.topic_alerts ? "flex-end" : "flex-start",
+                      shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
+                    }} />
+                  </Pressable>
+                </View>
+
+                {/* Divider */}
+                <View style={{ height: 1, backgroundColor: "#e0e7ef", marginBottom: 18 }} />
+
+                {/* ── Posting reminder ─────────────────────────────── */}
+                <View>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: notifPrefs.posting_reminder ? 10 : 0 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: "#1a2a3a", fontSize: 14, fontWeight: "600" }}>Posting reminder</Text>
+                      <Text style={{ color: "#6b7a8d", fontSize: 12, marginTop: 2 }}>
+                        Nudge me when I haven't posted in a while
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => savePrefs({ posting_reminder: !notifPrefs.posting_reminder })}
+                      disabled={notifSaving}
+                      style={{
+                        width: 44, height: 26, borderRadius: 13,
+                        backgroundColor: notifPrefs.posting_reminder ? "#22c55e" : "#d0d8e4",
+                        justifyContent: "center", paddingHorizontal: 3,
+                      }}
+                    >
+                      <View style={{
+                        width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
+                        alignSelf: notifPrefs.posting_reminder ? "flex-end" : "flex-start",
+                        shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
+                      }} />
+                    </Pressable>
+                  </View>
+
+                  {/* Threshold picker */}
+                  {notifPrefs.posting_reminder && (
+                    <View>
+                      <Text style={{ color: "#6b7a8d", fontSize: 11, fontWeight: "600", letterSpacing: 0.5, marginBottom: 8 }}>
+                        IF I HAVEN'T POSTED IN
+                      </Text>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        {[3, 5, 7, 10].map((d) => {
+                          const active = notifPrefs.posting_reminder_days === d;
+                          return (
+                            <Pressable
+                              key={d}
+                              onPress={() => savePrefs({ posting_reminder_days: d })}
+                              disabled={notifSaving}
+                              style={{
+                                flex: 1, paddingVertical: 8, borderRadius: 10,
+                                alignItems: "center", borderWidth: 1.5,
+                                backgroundColor: active ? "#22c55e" : "#f0f4f8",
+                                borderColor: active ? "#22c55e" : "#d0d8e4",
+                              }}
+                            >
+                              <Text style={{ color: active ? "#fff" : "#4a6a84", fontSize: 13, fontWeight: "700" }}>
+                                {d}d
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {notifSaving && (
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, gap: 6 }}>
+                    <ActivityIndicator size="small" color="#4A9EDB" />
+                    <Text style={{ color: "#6b7a8d", fontSize: 12 }}>Saving…</Text>
+                  </View>
+                )}
+              </SectionCard>
+            )}
 
             {/* Email digest — logged-in only */}
             {!isGuest && (

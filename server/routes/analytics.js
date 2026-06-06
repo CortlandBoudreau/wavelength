@@ -58,4 +58,52 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/analytics/affinity
+// Returns per-category engagement scores for the logged-in user, used by the
+// mobile app to render the Interest Profile card.
+//
+// Response shape:
+//   { affinity: [ { category, views, favorites, posted, affinity_score }, ... ] }
+//   affinity_score is 0–1, normalised against the user's top category.
+//   Categories with no interactions in the last 30 days are omitted.
+router.get('/affinity', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      WITH raw AS (
+        SELECT
+          s.category,
+          COUNT(*)                                                         AS views,
+          COUNT(*) FILTER (WHERE i.favorited)                             AS favorites,
+          COUNT(*) FILTER (WHERE i.used)                                  AS posted,
+          SUM(
+            CASE WHEN i.viewed_at IS NOT NULL THEN 1 ELSE 0 END +
+            CASE WHEN i.favorited             THEN 3 ELSE 0 END +
+            CASE WHEN i.used                  THEN 5 ELSE 0 END
+          )::float                                                         AS score
+        FROM interactions i
+        JOIN stories s ON s.id = i.story_id
+        WHERE i.user_id = $1
+          AND i.viewed_at > NOW() - INTERVAL '30 days'
+        GROUP BY s.category
+      ),
+      max_score AS (
+        SELECT GREATEST(MAX(score), 1) AS max_score FROM raw
+      )
+      SELECT
+        r.category,
+        r.views::int,
+        r.favorites::int,
+        r.posted::int,
+        ROUND((r.score / m.max_score)::numeric, 3) AS affinity_score
+      FROM raw r, max_score m
+      ORDER BY r.score DESC
+    `, [req.user.id]);
+
+    res.json({ affinity: rows });
+  } catch (err) {
+    console.error('[GET /analytics/affinity]', err.message);
+    res.status(500).json({ error: 'Failed to load affinity data' });
+  }
+});
+
 module.exports = router;

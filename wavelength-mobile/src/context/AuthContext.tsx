@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as authApi from "../api/auth";
 import { updateProfile } from "../api/auth";
-import { scheduleDailyDigest } from "../utils/notifications";
+import { scheduleDailyDigest, deregisterPushToken } from "../utils/notifications";
 import client from "../api/client";
 import type { User } from "../api/auth";
 
@@ -20,6 +20,7 @@ interface AuthContextValue {
   guestInterests: string[];
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string, interests?: string[]) => Promise<void>;
+  loginWithGoogle: (accessToken: string) => Promise<void>;
   loginAsGuest: () => void;
   logout: () => Promise<void>;
   completeOnboarding: (interests: string[]) => Promise<void>;
@@ -91,6 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (isGuest && !guestOnboarded) ||
     (!!user && (user.interests?.length ?? 0) === 0);
 
+  const loginWithGoogle = async (accessToken: string) => {
+    const { token: t, user: u } = await authApi.loginWithGoogle(accessToken);
+    await SecureStore.setItemAsync("token", t);
+    setToken(t);
+    setUser(u);
+    setIsGuest(false);
+    scheduleDailyDigest();
+  };
+
   const login = async (email: string, password: string) => {
     const { token: t, user: u } = await authApi.login(email, password);
     await SecureStore.setItemAsync("token", t);
@@ -128,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    await deregisterPushToken().catch(() => {}); // best-effort before token is cleared
     await SecureStore.deleteItemAsync("token");
     setUser(null);
     setToken(null);
@@ -163,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user, token, isGuest, isLoading,
       needsOnboarding, guestInterests,
-      login, register, loginAsGuest, logout, completeOnboarding, refreshUser,
+      login, register, loginWithGoogle, loginAsGuest, logout, completeOnboarding, refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

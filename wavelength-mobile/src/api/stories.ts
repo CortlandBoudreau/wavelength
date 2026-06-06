@@ -39,6 +39,8 @@ export interface FetchStoriesParams {
 
 export interface FetchStoriesResult {
   stories: Story[];
+  /** True when the feed was filtered by the user's category affinity model. */
+  personalized?: boolean;
 }
 
 export const fetchStories = async (params?: FetchStoriesParams): Promise<FetchStoriesResult> => {

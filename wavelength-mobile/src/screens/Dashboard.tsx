@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { fetchStories, searchStories, type Story, type Category } from "../api/stories";
-import { fetchTrendingHashtags } from "../api/trending";
+import { fetchTrendingHashtags, fetchTopicMoments, type TopicMoment, type TrendingHashtag } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
 import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
 import { useAuth } from "../context/AuthContext";
@@ -42,7 +42,7 @@ export default function Dashboard() {
   const categories: Category[] = (user?.interests ?? guestInterests) as Category[];
   const [category, setCategory] = useState<Category | "all">("all");
   const [hashtag, setHashtag] = useState<string | undefined>();
-  const [trending, setTrending] = useState<string[]>([]);
+  const [trending, setTrending] = useState<TrendingHashtag[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -52,6 +52,8 @@ export default function Dashboard() {
   const [sort, setSort] = useState<"newest" | "score">("newest");
   const [hidePosted, setHidePosted] = useState(false);
   const [topToday, setTopToday] = useState(false);
+  const [isPersonalized, setIsPersonalized] = useState(false);
+  const [topics, setTopics] = useState<TopicMoment[]>([]);
   const [newBannerCount, setNewBannerCount] = useState(0);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,6 +74,7 @@ export default function Dashboard() {
         sort:       sort === "score" ? "score" : undefined,
       });
       setStories(deduplicateClusters(result.stories));
+      setIsPersonalized(result.personalized ?? false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setFetchError(msg);
@@ -81,8 +84,12 @@ export default function Dashboard() {
   const loadTrending = useCallback(async () => {
     if (Date.now() - trendingFetchedAt.current < TRENDING_STALE_MS) return;
     try {
-      const data = await fetchTrendingHashtags();
-      setTrending(data.map((t) => t.hashtag));
+      const [hashtagData, topicData] = await Promise.all([
+        fetchTrendingHashtags(),
+        fetchTopicMoments().catch(() => []),
+      ]);
+      setTrending(hashtagData);
+      setTopics(topicData);
       trendingFetchedAt.current = Date.now();
     } catch {
       // non-critical
@@ -225,6 +232,20 @@ export default function Dashboard() {
             </Pressable>
           )}
 
+          {/* Personalization indicator — shown when the feed is being tailored */}
+          {isLoggedIn && isPersonalized && !topToday && (
+            <View style={{
+              flexDirection: "row", alignItems: "center", gap: 4,
+              backgroundColor: "rgba(99,102,241,0.18)",
+              borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6,
+            }}>
+              <Ionicons name="sparkles" size={12} color="#a78bfa" />
+              <Text style={{ color: "#a78bfa", fontSize: 11, fontWeight: "700" }}>
+                Personalized
+              </Text>
+            </View>
+          )}
+
           {isLoggedIn && isPro && (
             <Pressable
               onPress={() => setHidePosted((h) => !h)}
@@ -258,13 +279,77 @@ export default function Dashboard() {
             horizontal
             showsHorizontalScrollIndicator={false}
             data={trending.slice(0, 10)}
-            keyExtractor={(item) => item}
+            keyExtractor={(item) => item.hashtag}
             renderItem={({ item }) => (
               <HashtagPill
-                tag={item}
-                active={hashtag === item}
+                tag={item.hashtag}
+                active={hashtag === item.hashtag}
+                isTrending={item.is_trending}
                 onPress={(t) => setHashtag((prev) => (prev === t ? undefined : t))}
               />
+            )}
+          />
+        </View>
+      )}
+
+      {/* Topic Moments — active bursts of 4+ stories on the same topic */}
+      {topics.length > 0 && (
+        <View style={{ backgroundColor: "#F5F0E8", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+            <Ionicons name="flame" size={13} color="#f97316" style={{ marginRight: 5 }} />
+            <Text style={{ color: "#2c3e50", fontSize: 11, fontWeight: "700", letterSpacing: 0.5 }}>
+              TOPIC MOMENTS
+            </Text>
+            <Text style={{ color: "#9aabb8", fontSize: 10, marginLeft: 6 }}>
+              multiple stories breaking in 24h
+            </Text>
+          </View>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={topics}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ gap: 10, paddingBottom: 4 }}
+            renderItem={({ item: topic }) => (
+              <Pressable
+                onPress={() => {
+                  if (topic.top_story?.id) {
+                    navigation.navigate("StoryDetail", { storyId: topic.top_story.id });
+                  }
+                }}
+                style={{
+                  backgroundColor: "#fff7ed",
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: "#fed7aa",
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  maxWidth: 200,
+                  minWidth: 140,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                  <View style={{
+                    backgroundColor: "#f97316", borderRadius: 10,
+                    paddingHorizontal: 6, paddingVertical: 2, marginRight: 6,
+                  }}>
+                    <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>
+                      {topic.story_count} stories
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={{ color: "#7c2d12", fontSize: 13, fontWeight: "700", textTransform: "capitalize" }}
+                  numberOfLines={2}
+                >
+                  {topic.topic_label}
+                </Text>
+                {topic.top_story && (
+                  <Text style={{ color: "#9a3412", fontSize: 11, marginTop: 3 }} numberOfLines={2}>
+                    {topic.top_story.title}
+                  </Text>
+                )}
+              </Pressable>
             )}
           />
         </View>

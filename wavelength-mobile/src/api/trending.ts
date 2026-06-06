@@ -1,8 +1,10 @@
 import client from "./client";
 
 export interface TrendingHashtag {
-  hashtag: string;
-  count: number;
+  hashtag:     string;
+  count:       number;
+  velocity:    number;  // recent_count / baseline_daily_avg — higher = more trending
+  is_trending: boolean; // true when velocity >= 3×
 }
 
 export const fetchTrendingHashtags = async (
@@ -13,4 +15,19 @@ export const fetchTrendingHashtags = async (
     params: { days, limit },
   });
   return data;
+};
+
+export interface TopicMoment {
+  id: string;
+  topic_label: string;
+  story_count: number;
+  story_ids: string[];
+  first_seen_at: string;
+  expires_at: string;
+  top_story: { id: string; title: string; category: string } | null;
+}
+
+export const fetchTopicMoments = async (): Promise<TopicMoment[]> => {
+  const { data } = await client.get<{ topics: TopicMoment[] }>("/trending/topics");
+  return data.topics ?? [];
 };

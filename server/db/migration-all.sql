@@ -105,6 +105,46 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id);
 
+-- ── Google OAuth ─────────────────────────────────────────────────────────────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_idx
+  ON users(google_id) WHERE google_id IS NOT NULL;
+
+-- ── Feed personalisation: per-story view tracking ─────────────────────────────
+ALTER TABLE interactions ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_interactions_viewed_at
+  ON interactions(user_id, viewed_at) WHERE viewed_at IS NOT NULL;
+
+-- ── Freshness decay score ─────────────────────────────────────────────────────
+ALTER TABLE summaries ADD COLUMN IF NOT EXISTS decayed_score FLOAT;
+UPDATE summaries SET decayed_score = engagement_score WHERE decayed_score IS NULL;
+CREATE INDEX IF NOT EXISTS idx_summaries_decayed_score ON summaries(decayed_score DESC);
+
+-- ── Push tokens for server-initiated notifications ────────────────────────────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT;
+
+-- ── Trending topic moments ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS trending_topics (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  topic_label   TEXT NOT NULL,
+  story_ids     JSONB NOT NULL,
+  story_count   INT NOT NULL,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at    TIMESTAMPTZ NOT NULL,
+  notified      BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_trending_topics_expires ON trending_topics(expires_at);
+
+-- ── Per-user notification preferences ────────────────────────────────────────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEFAULT '{
+  "daily_digest":          true,
+  "daily_digest_hour":     9,
+  "topic_alerts":          true,
+  "posting_reminder":      false,
+  "posting_reminder_days": 5
+}'::jsonb;
+
 -- ── seed data ─────────────────────────────────────────────────────────────────
 INSERT INTO promo_codes (code, description, grants_tier, duration_days, max_uses)
 VALUES ('FOUNDER', 'Friends, family & early testers — lifetime access', 'lifetime', NULL, 10)

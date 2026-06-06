@@ -2,6 +2,9 @@ const cron = require('node-cron');
 const { runAggregation } = require('./newsAggregator');
 const { summarizeUnsummarized } = require('./claudeSummarizer');
 const { clusterRecentStories } = require('./clusterStories');
+const { updateDecayedScores } = require('./freshnessDecay');
+const { detectAndNotify, expireOldTopics } = require('./topicBursts');
+const { sendPostingReminders } = require('./postingReminder');
 const { sendDigest } = require('./emailDigest');
 const pool = require('../db/pool');
 
@@ -24,41 +27,40 @@ async function softDeleteOldStories() {
 }
 
 function startScheduler() {
-  // 2:00 AM — overnight + international coverage
-  cron.schedule('0 2 * * *', async () => {
-    console.log('[Scheduler] Running overnight aggregation...');
-    try {
-      await runAggregation();
-      await summarizeUnsummarized();
-      await clusterRecentStories();
-    } catch (err) {
-      console.error('[Scheduler] Aggregation error:', err);
-    }
-  });
+  // ── Aggregation pipeline ────────────────────────────────────────────────────
+  // AGGREGATION_RUNS_PER_DAY controls how many times per day the full pipeline
+  // runs (fetch → summarize → cluster → decay → burst detection).
+  //   1 = once daily at 10:00 AM  (staging / dev — cheapest)
+  //   2 = 10:00 AM + 4:00 PM      (moderate)
+  //   3 = 2:00 AM + 10:00 AM + 4:00 PM (production default)
+  const runsPerDay = parseInt(process.env.AGGREGATION_RUNS_PER_DAY ?? '3', 10);
+  console.log(`[Scheduler] Aggregation runs per day: ${runsPerDay}`);
 
-  // 10:00 AM — morning news cycle
-  cron.schedule('0 10 * * *', async () => {
-    console.log('[Scheduler] Running morning aggregation...');
+  async function runPipeline(label) {
+    console.log(`[Scheduler] Running ${label} aggregation...`);
     try {
       await runAggregation();
       await summarizeUnsummarized();
       await clusterRecentStories();
+      await updateDecayedScores();
+      await detectAndNotify();
     } catch (err) {
       console.error('[Scheduler] Aggregation error:', err);
     }
-  });
+  }
 
-  // 4:00 PM — afternoon publications
-  cron.schedule('0 16 * * *', async () => {
-    console.log('[Scheduler] Running afternoon aggregation...');
-    try {
-      await runAggregation();
-      await summarizeUnsummarized();
-      await clusterRecentStories();
-    } catch (err) {
-      console.error('[Scheduler] Aggregation error:', err);
-    }
-  });
+  // 2:00 AM — overnight + international coverage (runs=3 only)
+  if (runsPerDay >= 3) {
+    cron.schedule('0 2 * * *', () => runPipeline('overnight'));
+  }
+
+  // 10:00 AM — morning news cycle (always runs)
+  cron.schedule('0 10 * * *', () => runPipeline('morning'));
+
+  // 4:00 PM — afternoon publications (runs=2 or 3)
+  if (runsPerDay >= 2) {
+    cron.schedule('0 16 * * *', () => runPipeline('afternoon'));
+  }
 
   // 8:00 AM daily — send email digest
   cron.schedule('0 8 * * *', async () => {
@@ -70,11 +72,22 @@ function startScheduler() {
     }
   });
 
-  // 3:00 AM daily — soft-delete stories older than 14 days
+  // 8:00 PM daily — posting reminder (after the day's content window has passed)
+  cron.schedule('0 20 * * *', async () => {
+    console.log('[Scheduler] Sending posting reminders...');
+    try {
+      await sendPostingReminders();
+    } catch (err) {
+      console.error('[Scheduler] Posting reminder error:', err);
+    }
+  });
+
+  // 3:00 AM daily — soft-delete old stories + expire old topic moments
   cron.schedule('0 3 * * *', async () => {
     console.log('[Scheduler] Running story cleanup...');
     try {
       await softDeleteOldStories();
+      await expireOldTopics();
     } catch (err) {
       console.error('[Scheduler] Cleanup error:', err);
     }

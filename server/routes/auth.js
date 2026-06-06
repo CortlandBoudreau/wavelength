@@ -278,10 +278,151 @@ router.post('/forgot-password', async (req, res) => {
       html: `<p>Your WaveLength password reset code is:</p><h2 style="letter-spacing:8px">${otp}</h2><p>This code expires in 15 minutes. If you didn't request a reset, you can ignore this email.</p>`,
     });
   } catch (err) {
-    console.error('[POST /auth/forgot-password]', err.message);
+    // Always return 200 to prevent email enumeration — but log the real error
+    console.error('[POST /auth/forgot-password] FAILED to send reset email:', err.message);
+    if (err.response?.body) {
+      // SendGrid error detail
+      console.error('[POST /auth/forgot-password] SendGrid error:', JSON.stringify(err.response.body));
+    }
   }
 
   res.json({ ok: true });
+});
+
+// GET /api/auth/notification-preferences
+router.get('/notification-preferences', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT notification_prefs FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0].notification_prefs ?? {});
+  } catch (err) {
+    console.error('[GET /auth/notification-preferences]', err.message);
+    res.status(500).json({ error: 'Failed to load preferences' });
+  }
+});
+
+// PATCH /api/auth/notification-preferences
+// Accepts a partial object — only the keys present are merged in.
+router.patch('/notification-preferences', requireAuth, async (req, res) => {
+  const ALLOWED_KEYS = new Set([
+    'daily_digest', 'daily_digest_hour', 'topic_alerts',
+    'posting_reminder', 'posting_reminder_days',
+  ]);
+
+  const patch = req.body;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+    return res.status(400).json({ error: 'Body must be an object' });
+
+  const unknown = Object.keys(patch).filter((k) => !ALLOWED_KEYS.has(k));
+  if (unknown.length)
+    return res.status(400).json({ error: `Unknown preference key(s): ${unknown.join(', ')}` });
+
+  // Type-check each accepted field
+  if ('daily_digest'          in patch && typeof patch.daily_digest          !== 'boolean') return res.status(400).json({ error: 'daily_digest must be boolean' });
+  if ('topic_alerts'          in patch && typeof patch.topic_alerts          !== 'boolean') return res.status(400).json({ error: 'topic_alerts must be boolean' });
+  if ('posting_reminder'      in patch && typeof patch.posting_reminder      !== 'boolean') return res.status(400).json({ error: 'posting_reminder must be boolean' });
+  if ('daily_digest_hour'     in patch) {
+    const h = patch.daily_digest_hour;
+    if (typeof h !== 'number' || !Number.isInteger(h) || h < 0 || h > 23)
+      return res.status(400).json({ error: 'daily_digest_hour must be an integer 0–23' });
+  }
+  if ('posting_reminder_days' in patch) {
+    const d = patch.posting_reminder_days;
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < 1 || d > 30)
+      return res.status(400).json({ error: 'posting_reminder_days must be an integer 1–30' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users
+       SET notification_prefs = notification_prefs || $1::jsonb
+       WHERE id = $2
+       RETURNING notification_prefs`,
+      [JSON.stringify(patch), req.user.id]
+    );
+    res.json(rows[0].notification_prefs);
+  } catch (err) {
+    console.error('[PATCH /auth/notification-preferences]', err.message);
+    res.status(500).json({ error: 'Failed to save preferences' });
+  }
+});
+
+// PATCH /api/auth/push-token — store (or clear) the Expo push token for this user.
+// Called by the mobile app after notification permission is granted.
+router.patch('/push-token', requireAuth, async (req, res) => {
+  const { push_token } = req.body;
+  // push_token may be a string (register) or null (deregister on logout)
+  if (push_token !== null && push_token !== undefined && typeof push_token !== 'string')
+    return res.status(400).json({ error: 'push_token must be a string or null' });
+
+  try {
+    await pool.query(
+      'UPDATE users SET push_token = $1 WHERE id = $2',
+      [push_token ?? null, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[PATCH /auth/push-token]', err.message);
+    res.status(500).json({ error: 'Failed to save push token' });
+  }
+});
+
+// POST /api/auth/google — sign in / register via Google OAuth
+// Accepts the access_token from expo-auth-session; verifies it with Google's
+// userinfo endpoint, then finds or creates the user account.
+router.post('/google', async (req, res) => {
+  const { access_token } = req.body;
+  if (!access_token || typeof access_token !== 'string')
+    return res.status(400).json({ error: 'access_token required' });
+
+  try {
+    // Verify by calling Google's userinfo endpoint — only a valid token gets data back
+    const gRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (!gRes.ok) return res.status(401).json({ error: 'Invalid Google token' });
+
+    const { sub: googleId, email, name, email_verified } = await gRes.json();
+    if (!email) return res.status(401).json({ error: 'Google account has no email' });
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
+    let user = rows[0];
+
+    if (!user) {
+      // New user — create with 7-day trial (same as email register)
+      const trialEnds = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const fallbackName = name ?? normalizedEmail.split('@')[0];
+      const result = await pool.query(
+        `INSERT INTO users
+           (email, name, google_id, email_verified, subscription_tier, subscription_expires_at)
+         VALUES ($1, $2, $3, $4, 'trial', $5)
+         RETURNING id, email, name, interests, hashtag_includes, hashtag_excludes,
+                   subscription_tier, subscription_expires_at, email_verified`,
+        [normalizedEmail, fallbackName, googleId, !!email_verified, trialEnds]
+      );
+      user = result.rows[0];
+    } else {
+      // Existing account — link google_id + mark email verified if not already
+      if (!user.google_id) {
+        await pool.query(
+          'UPDATE users SET google_id = $1, email_verified = TRUE WHERE id = $2',
+          [googleId, user.id]
+        );
+      }
+      // Strip sensitive fields before responding
+      const { password_hash, email_verify_token, email_verify_sent_at, ...safe } = user;
+      user = safe;
+    }
+
+    res.json({ user, token: makeToken(user) });
+  } catch (err) {
+    console.error('[POST /auth/google]', err.message);
+    res.status(500).json({ error: 'Google sign-in failed' });
+  }
 });
 
 // POST /api/auth/reset-password

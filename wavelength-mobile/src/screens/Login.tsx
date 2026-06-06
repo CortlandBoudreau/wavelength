@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View, Text, TextInput, Pressable, ActivityIndicator,
   KeyboardAvoidingView, Platform, Alert, ScrollView,
@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import WaveLogo from "../components/WaveLogo";
 import { useAuth } from "../context/AuthContext";
+import { useGoogleAuth } from "../hooks/useGoogleAuth";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { AuthStackParamList } from "../navigation/AuthStack";
 
@@ -15,12 +16,29 @@ interface Props {
 }
 
 export default function Login({ navigation }: Props) {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
+  const { request: googleRequest, response: googleResponse, promptAsync: googlePrompt } = useGoogleAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const canSubmit = email.trim().length > 0 && password.length > 0;
+
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (googleResponse?.type === "success") {
+      const token = googleResponse.authentication?.accessToken;
+      if (token) {
+        setLoading(true);
+        loginWithGoogle(token).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Google sign-in failed";
+          Alert.alert("Google sign-in failed", msg);
+        }).finally(() => setLoading(false));
+      }
+    } else if (googleResponse?.type === "error") {
+      Alert.alert("Google sign-in failed", googleResponse.error?.message ?? "Unknown error");
+    }
+  }, [googleResponse]);
 
   const handleLogin = async () => {
     if (!canSubmit) return;
@@ -116,6 +134,35 @@ export default function Login({ navigation }: Props) {
 
           {/* Fixed footer — always visible above keyboard */}
           <View style={{ paddingHorizontal: 24, paddingBottom: 12, paddingTop: 8, backgroundColor: "#0f1e2d" }}>
+            {/* Google Sign-In */}
+            <Pressable
+              onPress={() => googlePrompt()}
+              disabled={loading || !googleRequest}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#ffffff",
+                borderRadius: 14,
+                paddingVertical: 14,
+                marginBottom: 10,
+                opacity: loading || !googleRequest ? 0.6 : 1,
+              }}
+            >
+              <Ionicons name="logo-google" size={18} color="#DB4437" style={{ marginRight: 8 }} />
+              <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
+                Continue with Google
+              </Text>
+            </Pressable>
+
+            {/* Divider */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
+              <Text style={{ color: "#5a7a94", fontSize: 12, marginHorizontal: 10 }}>or</Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
+            </View>
+
+            {/* Email Sign-In */}
             <Pressable
               onPress={handleLogin}
               disabled={loading || !canSubmit}

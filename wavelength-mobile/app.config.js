@@ -14,6 +14,7 @@ export default {
   expo: {
     name: IS_STAGING ? "WaveLength Staging" : "WaveLength",
     slug: "wavelength",
+    scheme: "wavelength",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
