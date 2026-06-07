@@ -9,79 +9,147 @@ interface Props {
 const SIZES = {
   sm: { tile: 40, word: 0,  tag: 0  },
   md: { tile: 48, word: 22, tag: 0  },
-  lg: { tile: 56, word: 28, tag: 10 },
+  lg: { tile: 60, word: 28, tag: 10 },
 };
 
 /**
- * Relative bar heights for the waveform icon (0–1).
- * Two gentle peaks — reads as a frequency / wavelength, not a burger menu.
+ * WaveLength logo — an ocean wave icon in a deep-navy rounded tile.
+ *
+ * The wave is built from two layered arcs using border-radius:
+ *   • A deep-teal swell (back wave)
+ *   • A brighter blue crest (front wave)
+ * plus a white foam dot at the crest tip.
+ *
+ * No external SVG library needed — pure View shapes.
  */
-const BARS = [0.35, 0.7, 1, 0.65, 0.35, 0.65, 1, 0.7, 0.35];
-
 export default function WaveLogo({ size = "md" }: Props) {
   const s = SIZES[size];
+  const t = s.tile;
 
-  const tileInner  = s.tile * 0.62;   // usable height inside tile
-  const barWidth   = Math.round(s.tile * 0.055);
-  const barGap     = Math.round(s.tile * 0.038);
-  const barRadius  = Math.ceil(barWidth / 2);
+  // Wave proportions relative to tile size
+  const backWaveH   = Math.round(t * 0.42);   // back swell height
+  const frontWaveH  = Math.round(t * 0.34);   // front crest height
+  const waveWidth   = Math.round(t * 1.6);    // waves wider than tile for overflow crop
+  const waveLeft    = -Math.round(t * 0.3);   // offset left so they start before the tile
+
+  // Crest curl — small circle peeking at top-right of front wave
+  const curlSize    = Math.round(t * 0.18);
+  const curlRight   = Math.round(t * 0.2);
+  const curlBottom  = frontWaveH - Math.round(curlSize * 0.5);
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
 
-      {/* Icon tile */}
+      {/* ── Icon tile ───────────────────────────────────────── */}
       <View
         style={{
-          backgroundColor: "#0f1e2d",
-          borderRadius: 10,
-          width: s.tile,
-          height: s.tile,
+          backgroundColor: "#0d1e2e",
+          borderRadius: Math.round(t * 0.22),
+          width: t,
+          height: t,
+          overflow: "hidden",
           alignItems: "center",
-          justifyContent: "center",
+          justifyContent: "flex-end",
           marginRight: size === "sm" ? 0 : 12,
+          // Subtle border catches light
+          borderWidth: 1,
+          borderColor: "rgba(74,158,219,0.18)",
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {BARS.map((ratio, i) => (
-            <View
-              key={i}
-              style={{
-                width: barWidth,
-                height: Math.max(3, Math.round(tileInner * ratio)),
-                backgroundColor: "#4A9EDB",
-                borderRadius: barRadius,
-                marginRight: i < BARS.length - 1 ? barGap : 0,
-              }}
-            />
-          ))}
-        </View>
+        {/* Subtle radial glow at top */}
+        <View
+          style={{
+            position: "absolute",
+            top: -Math.round(t * 0.4),
+            left: Math.round(t * 0.1),
+            width: Math.round(t * 0.8),
+            height: Math.round(t * 0.8),
+            borderRadius: Math.round(t * 0.4),
+            backgroundColor: "rgba(74,158,219,0.12)",
+          }}
+        />
+
+        {/* Back wave — deeper teal, rounder arc */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: waveLeft,
+            width: waveWidth,
+            height: backWaveH,
+            backgroundColor: "#1a6a8a",
+            borderTopLeftRadius:  Math.round(backWaveH * 1.1),
+            borderTopRightRadius: Math.round(backWaveH * 0.6),
+          }}
+        />
+
+        {/* Front wave — bright ocean blue, sharper leading crest */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: waveLeft + Math.round(t * 0.08),
+            width: waveWidth,
+            height: frontWaveH,
+            backgroundColor: "#4A9EDB",
+            borderTopLeftRadius:  Math.round(frontWaveH * 1.3),
+            borderTopRightRadius: Math.round(frontWaveH * 0.4),
+          }}
+        />
+
+        {/* Crest foam curl — white circle at the peak of the front wave */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: curlBottom,
+            right: curlRight,
+            width: curlSize,
+            height: curlSize,
+            borderRadius: curlSize / 2,
+            backgroundColor: "rgba(255,255,255,0.82)",
+          }}
+        />
+
+        {/* Seafloor — very dark strip at the very bottom */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: Math.round(t * 0.12),
+            backgroundColor: "#0a1825",
+          }}
+        />
       </View>
 
-      {/* Wordmark */}
+      {/* ── Wordmark ──────────────────────────────────────────── */}
       {size !== "sm" && (
         <View style={{ justifyContent: "center" }}>
           <Text
             style={{
-              color: "#4A9EDB",
+              color: "#ffffff",
               fontSize: s.word,
               fontWeight: "800",
-              letterSpacing: 0.4,
+              letterSpacing: 0.3,
               lineHeight: s.word + 4,
             }}
           >
-            WaveLength
+            Wave
+            <Text style={{ color: "#4A9EDB" }}>Length</Text>
           </Text>
           {size === "lg" && (
             <Text
               style={{
-                color: "#6a9ab8",
+                color: "rgba(74,158,219,0.65)",
                 fontSize: s.tag,
-                letterSpacing: 2.5,
-                marginTop: 2,
+                letterSpacing: 2.2,
+                marginTop: 3,
                 fontWeight: "600",
+                textTransform: "uppercase",
               }}
             >
-              SCIENCE · CREATOR
+              Science · Creator
             </Text>
           )}
         </View>

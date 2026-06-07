@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -297,7 +299,11 @@ export default function Profile() {
         presentationStyle="pageSheet"
         onRequestClose={() => setFeedbackVisible(false)}
       >
-        <View style={{ flex: 1, backgroundColor: "#1a2a3a", padding: 24 }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+        <ScrollView contentContainerStyle={{ backgroundColor: "#1a2a3a", padding: 24, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
             <Text style={{ color: "#ffffff", fontSize: 20, fontWeight: "800" }}>Send Feedback</Text>
             <Pressable onPress={() => setFeedbackVisible(false)} hitSlop={8}>
@@ -369,7 +375,8 @@ export default function Profile() {
               : <Text style={{ color: "#ffffff", fontWeight: "700", fontSize: 15 }}>Send Feedback</Text>
             }
           </Pressable>
-        </View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
       {/* ── Change Password Modal ──────────────────────────── */}
       <Modal visible={changePwVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setChangePwVisible(false)}>
@@ -924,12 +931,15 @@ export default function Profile() {
             <Pressable
               onPress={() => setFeedbackVisible(true)}
               style={{
+                backgroundColor: "#ffffff",
+                borderWidth: 1.5, borderColor: "#d0dce8",
+                borderRadius: 12, paddingVertical: 14,
                 flexDirection: "row", alignItems: "center", justifyContent: "center",
-                gap: 7, paddingVertical: 12, marginBottom: 4,
+                gap: 8, marginBottom: 16,
               }}
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={16} color="#4A9EDB" />
-              <Text style={{ color: "#4A9EDB", fontSize: 14, fontWeight: "600" }}>
+              <Ionicons name="chatbubble-ellipses-outline" size={17} color="#4A9EDB" />
+              <Text style={{ color: "#4A9EDB", fontSize: 14, fontWeight: "700" }}>
                 Send Feedback or Report a Bug
               </Text>
             </Pressable>

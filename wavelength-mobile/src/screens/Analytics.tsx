@@ -9,6 +9,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import client from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { isProUser } from "../utils/proCheck";
+import type { RootStackParamList } from "../navigation/AppNavigator";
 
 interface AnalyticsData {
   totals?: {
@@ -59,11 +62,45 @@ const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   general:     "newspaper-outline",
 };
 
-export default function Analytics() {
+export default function Analytics({ navigation }: { navigation: any }) {
+  const { user } = useAuth();
+  const isGuest = !user;
+  const isPro = isProUser(user);
+
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [affinity, setAffinity] = useState<AffinityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [affinityLoading, setAffinityLoading] = useState(true);
+
+  // Analytics requires a logged-in account (free or pro) — show upsell for guests
+  // and a "start using the app" nudge for free users who haven't interacted yet.
+  if (isGuest) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#F5F0E8" }} edges={["top", "left", "right"]}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
+          <View style={{
+            width: 72, height: 72, borderRadius: 36,
+            backgroundColor: "#e8f4fd",
+            alignItems: "center", justifyContent: "center", marginBottom: 20,
+          }}>
+            <Ionicons name="bar-chart-outline" size={34} color="#4A9EDB" />
+          </View>
+          <Text style={{ color: "#1a2a3a", fontSize: 20, fontWeight: "800", textAlign: "center", marginBottom: 8 }}>
+            Your interest profile
+          </Text>
+          <Text style={{ color: "#6b7a8d", fontSize: 14, textAlign: "center", lineHeight: 22, marginBottom: 28 }}>
+            Sign in to track which topics you love and get a smarter, personalised feed.
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate("Login")}
+            style={{ backgroundColor: "#4A9EDB", borderRadius: 12, paddingVertical: 14, paddingHorizontal: 36 }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Sign In</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   useEffect(() => {
     client

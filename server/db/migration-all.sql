@@ -145,6 +145,17 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEF
   "posting_reminder_days": 5
 }'::jsonb;
 
+-- ── feedback ─────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS feedback (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID        REFERENCES users(id) ON DELETE SET NULL,
+  type       TEXT        NOT NULL CHECK (type IN ('bug', 'feature', 'general')),
+  message    TEXT        NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
+
 -- ── seed data ─────────────────────────────────────────────────────────────────
 INSERT INTO promo_codes (code, description, grants_tier, duration_days, max_uses)
 VALUES ('FOUNDER', 'Friends, family & early testers — lifetime access', 'lifetime', NULL, 10)
