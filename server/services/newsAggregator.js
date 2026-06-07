@@ -362,23 +362,97 @@ async function fetchFromYouTube(channelId, channelName, category) {
   }).filter((s) => s.title && s.url);
 }
 
+// ── Title cleaning & quality filtering ───────────────────────────────────────
+
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&[a-z]+;/gi, '');
+}
+
+function cleanTitle(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let t = raw.trim();
+
+  // Decode HTML entities first
+  t = decodeHtmlEntities(t);
+
+  // Strip leading "RE:", "RT:", reply/retweet markers
+  t = t.replace(/^(RE|RT|FWD|THREAD):\s*/i, '');
+
+  // Strip URLs (http/https)
+  t = t.replace(/https?:\/\/\S+/g, '');
+
+  // Strip emoji (broad unicode ranges)
+  t = t.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
+  t = t.replace(/[\u{2600}-\u{27FF}]/gu, '');
+
+  // Collapse whitespace
+  t = t.replace(/\s+/g, ' ').trim();
+
+  // Truncate to 220 chars
+  if (t.length > 220) t = t.slice(0, 220).trim();
+
+  return t;
+}
+
+// Returns true if the title looks like a garbage social post rather than a news headline
+function isTitleJunk(title) {
+  if (!title || title.length < 15) return true;
+
+  // Mostly hashtags — count # occurrences vs word count
+  const hashtagCount = (title.match(/#\w+/g) || []).length;
+  const wordCount    = title.split(/\s+/).length;
+  if (hashtagCount > 0 && hashtagCount / wordCount > 0.4) return true;
+
+  // Price listings (Amazon deals, etc.)
+  if (/^\$[\d.]+\s*\|/.test(title)) return true;
+
+  // Starts with emoji or punctuation thread markers
+  if (/^[🧵👇💡📚☢️🌡️*]/.test(title)) return true;
+
+  // Mostly uppercase acronym spam (e.g. "#AE #AECH2 #TruthWarriors")
+  const allCapsWords = (title.match(/\b[A-Z]{3,}\b/g) || []).length;
+  if (allCapsWords / wordCount > 0.6) return true;
+
+  // Mastodon reply-style openers with no real content
+  if (/^@\w+/.test(title)) return true;
+
+  return false;
+}
+
 async function saveStories(stories) {
   let saved = 0;
+  let skippedJunk = 0;
   for (const story of stories) {
     if (!story.title || !story.url) continue;
+
+    const cleanedTitle = cleanTitle(story.title);
+    if (isTitleJunk(cleanedTitle)) {
+      skippedJunk++;
+      continue;
+    }
+
     try {
       const result = await pool.query(
         `INSERT INTO stories (title, source, url, published_at, category, raw_body)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (url) DO NOTHING
          RETURNING id`,
-        [story.title, story.source, story.url, story.published_at, story.category, story.raw_body]
+        [cleanedTitle, story.source, story.url, story.published_at, story.category, story.raw_body]
       );
       if (result.rowCount > 0) saved++;
     } catch (err) {
       console.error('Failed to save story:', story.title, err.message);
     }
   }
+  if (skippedJunk > 0) console.log(`[Aggregator] Skipped ${skippedJunk} junk titles`);
   return saved;
 }
 
