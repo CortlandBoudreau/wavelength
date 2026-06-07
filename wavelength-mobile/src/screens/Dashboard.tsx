@@ -16,7 +16,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { fetchStories, searchStories, type Story, type Category } from "../api/stories";
 import { fetchTrendingHashtags, fetchTopicMoments, type TopicMoment, type TrendingHashtag } from "../api/trending";
 import { deduplicateClusters } from "../utils/clusterDedup";
-import { getGuestStoryViewsToday, incrementGuestStoryViews } from "../utils/guestStorage";
+import { GUEST_DAILY_LIMIT, recordGuestStoryView } from "../utils/guestStorage";
 import { useAuth } from "../context/AuthContext";
 import { isProUser } from "../utils/proCheck";
 import StoryCard from "../components/StoryCard";
@@ -26,7 +26,7 @@ import HashtagPill from "../components/HashtagPill";
 import WaveLogo from "../components/WaveLogo";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
-const FREE_DETAIL_LIMIT = 3;
+const FREE_DETAIL_LIMIT = GUEST_DAILY_LIMIT;
 
 type DashboardNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -104,12 +104,12 @@ export default function Dashboard() {
   // Handle story tap — check guest limit before navigating
   const handleStoryPress = useCallback(async (story: Story) => {
     if (isGuest) {
-      const views = await getGuestStoryViewsToday();
-      if (views >= FREE_DETAIL_LIMIT) {
+      const { alreadySeen, total } = await recordGuestStoryView(story.id);
+      // Block only if this is a brand-new article AND the daily cap is reached
+      if (!alreadySeen && total > FREE_DETAIL_LIMIT) {
         navigation.navigate("Paywall");
         return;
       }
-      await incrementGuestStoryViews();
     }
     setViewedIds((prev) => new Set(prev).add(story.id));
     navigation.navigate("StoryDetail", { storyId: story.id });

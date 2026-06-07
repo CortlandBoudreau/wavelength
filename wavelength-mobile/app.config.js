@@ -23,7 +23,7 @@ export default {
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
-      backgroundColor: "#ffffff",
+      backgroundColor: "#0d1e2e",
     },
     ios: {
       supportsTablet: true,
@@ -32,12 +32,12 @@ export default {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         // Orange background on staging so it's visually distinct on the device
-        backgroundColor: IS_STAGING ? "#f97316" : "#ffffff",
+        backgroundColor: IS_STAGING ? "#f97316" : "#1a5f8a",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       package: IS_STAGING ? "com.cortland.wavelength.staging" : "com.cortland.wavelength",
-      versionCode: 5,
+      versionCode: 6,
     },
     web: {
       favicon: "./assets/favicon.png",

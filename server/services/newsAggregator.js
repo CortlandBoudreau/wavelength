@@ -3,7 +3,7 @@ const { XMLParser } = require('fast-xml-parser');
 const pool = require('../db/pool');
 
 const CATEGORY_QUERIES = {
-  marine_science:   'marine science OR ocean research OR marine biology OR sea discovery',
+  marine_science:   '"marine science" OR "ocean research" OR "marine biology" OR "ocean discovery"',
   coral_reefs:      'coral reef bleaching OR coral reef conservation OR reef ecosystem OR coral restoration',
   deep_sea:         'deep sea discovery OR deep ocean OR hydrothermal vent OR bioluminescence OR abyssal',
   conservation:     'marine conservation OR ocean protection OR endangered sea species OR marine reserve OR ocean sanctuary',
@@ -32,7 +32,7 @@ const RSS_FEEDS = [
   { url: 'https://www.sciencedaily.com/rss/health_medicine/brain_tumor.xml',                     category: 'health_science' },
   { url: 'https://www.sciencedaily.com/rss/plants_animals/extinction.xml',                       category: 'biodiversity' },
   // Phys.org — excellent research coverage
-  { url: 'https://phys.org/rss-feed/biology-news/',                                              category: 'marine_science' },
+  { url: 'https://phys.org/rss-feed/biology-news/',                                              category: 'biodiversity' },
   { url: 'https://phys.org/rss-feed/space-news/',                                                category: 'space' },
   { url: 'https://phys.org/rss-feed/earth-news/',                                                category: 'climate' },
   // EurekAlert — press releases direct from research institutions
@@ -156,7 +156,7 @@ const REDDIT_SOURCES = [
   { subreddit: 'Fishing',             category: 'aquaculture' },
   // Broad science
   { subreddit: 'science',             category: 'cool_facts' },
-  { subreddit: 'biology',             category: 'marine_science' },
+  { subreddit: 'biology',             category: 'biodiversity' },
   { subreddit: 'evolution',           category: 'biodiversity' },
   { subreddit: 'Paleontology',        category: 'biodiversity' },
   { subreddit: 'neuroscience',        category: 'health_science' },
