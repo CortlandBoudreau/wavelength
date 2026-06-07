@@ -51,6 +51,7 @@ export default {
           sounds: [],
         },
       ],
+      "expo-web-browser",
     ],
     extra: {
       appEnv: process.env.APP_ENV ?? "production",
