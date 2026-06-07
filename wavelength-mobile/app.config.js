@@ -37,7 +37,7 @@ export default {
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       package: IS_STAGING ? "com.cortland.wavelength.staging" : "com.cortland.wavelength",
-      versionCode: 5,
+      versionCode: 6,
     },
     web: {
       favicon: "./assets/favicon.png",
