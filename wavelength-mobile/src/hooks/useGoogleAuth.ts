@@ -23,11 +23,18 @@ import * as WebBrowser from "expo-web-browser";
 // Required: completes the auth session if the app was opened via the redirect URI
 WebBrowser.maybeCompleteAuthSession();
 
-export function useGoogleAuth() {
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    // scopes default to openid + profile + email — that's all we need
-  });
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
-  return { request, response, promptAsync } as const;
+export function useGoogleAuth() {
+  // If the Google client ID isn't configured, return a no-op so the app
+  // doesn't crash — the Google Sign-In button will simply be hidden.
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    GOOGLE_CLIENT_ID
+      ? { webClientId: GOOGLE_CLIENT_ID }
+      : null as any
+  );
+
+  const isAvailable = !!GOOGLE_CLIENT_ID;
+
+  return { request, response, promptAsync, isAvailable } as const;
 }

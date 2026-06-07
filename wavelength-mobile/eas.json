@@ -9,7 +9,8 @@
       "distribution": "internal",
       "env": {
         "APP_ENV": "development",
-        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:3001/api"
+        "EXPO_PUBLIC_API_URL": "https://wavelength-staging.up.railway.app/api",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE"
       }
     },
     "preview": {

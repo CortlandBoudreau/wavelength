@@ -20,7 +20,7 @@ interface Props {
 
 export default function Register({ navigation, route }: Props) {
   const { register, loginWithGoogle } = useAuth();
-  const { request: googleRequest, response: googleResponse, promptAsync: googlePrompt } = useGoogleAuth();
+  const { request: googleRequest, response: googleResponse, promptAsync: googlePrompt, isAvailable: googleAvailable } = useGoogleAuth();
   const interests = route.params?.interests ?? [];
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -171,8 +171,8 @@ export default function Register({ navigation, route }: Props) {
 
           {/* Fixed footer — always visible above keyboard */}
           <View style={{ paddingHorizontal: 24, paddingBottom: 12, paddingTop: 8, backgroundColor: "#0f1e2d" }}>
-            {/* Google Sign-Up */}
-            <Pressable
+            {/* Google Sign-Up — only shown when EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is configured */}
+            {googleAvailable && <Pressable
               onPress={() => googlePrompt()}
               disabled={loading || !googleRequest}
               style={{
@@ -190,7 +190,7 @@ export default function Register({ navigation, route }: Props) {
               <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
                 Continue with Google
               </Text>
-            </Pressable>
+            </Pressable>}
 
             {/* Divider */}
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
