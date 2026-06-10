@@ -37,7 +37,7 @@ export default {
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       package: IS_STAGING ? "com.cortland.wavelength.staging" : "com.cortland.wavelength",
-      versionCode: 6,
+      versionCode: 7,
     },
     web: {
       favicon: "./assets/favicon.png",
@@ -51,6 +51,7 @@ export default {
           sounds: [],
         },
       ],
+      "expo-web-browser",
     ],
     extra: {
       appEnv: process.env.APP_ENV ?? "production",

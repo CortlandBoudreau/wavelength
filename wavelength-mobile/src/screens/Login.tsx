@@ -17,7 +17,7 @@ interface Props {
 
 export default function Login({ navigation }: Props) {
   const { login, loginWithGoogle } = useAuth();
-  const { request: googleRequest, response: googleResponse, promptAsync: googlePrompt } = useGoogleAuth();
+  const { request: googleRequest, response: googleResponse, promptAsync: googlePrompt, isAvailable: googleAvailable } = useGoogleAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -134,8 +134,8 @@ export default function Login({ navigation }: Props) {
 
           {/* Fixed footer — always visible above keyboard */}
           <View style={{ paddingHorizontal: 24, paddingBottom: 12, paddingTop: 8, backgroundColor: "#0f1e2d" }}>
-            {/* Google Sign-In */}
-            <Pressable
+            {/* Google Sign-In — only shown when EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is configured */}
+            {googleAvailable && <Pressable
               onPress={() => googlePrompt()}
               disabled={loading || !googleRequest}
               style={{
@@ -153,7 +153,7 @@ export default function Login({ navigation }: Props) {
               <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
                 Continue with Google
               </Text>
-            </Pressable>
+            </Pressable>}
 
             {/* Divider */}
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>

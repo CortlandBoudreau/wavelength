@@ -240,25 +240,58 @@ async function fetchFromRSS(feedUrl, category) {
   }));
 }
 
-async function fetchFromReddit(subreddit, category) {
-  const response = await axios.get(
-    `https://www.reddit.com/r/${subreddit}/top.json?t=day&limit=8`,
+// ── Reddit OAuth token cache ──────────────────────────────────────────────────
+const redditToken = { value: null, expiresAt: 0 };
+
+async function getRedditToken() {
+  if (redditToken.value && Date.now() < redditToken.expiresAt) return redditToken.value;
+
+  const clientId     = process.env.REDDIT_CLIENT_ID;
+  const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null; // not configured yet
+
+  const resp = await axios.post(
+    'https://www.reddit.com/api/v1/access_token',
+    'grant_type=client_credentials',
     {
+      auth: { username: clientId, password: clientSecret },
+      headers: {
+        'User-Agent':   'WaveLength/1.0 (ocean science aggregator; non-commercial)',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       timeout: 8000,
-      headers: { 'User-Agent': 'WaveLength/1.0 (ocean science content aggregator)' },
     }
   );
+
+  redditToken.value     = resp.data.access_token;
+  redditToken.expiresAt = Date.now() + (resp.data.expires_in - 60) * 1000; // 1-min buffer
+  return redditToken.value;
+}
+
+async function fetchFromReddit(subreddit, category) {
+  const token = await getRedditToken();
+
+  // Fall back to unauthenticated .json endpoint if credentials not yet configured
+  const url     = token
+    ? `https://oauth.reddit.com/r/${subreddit}/top.json?t=day&limit=8`
+    : `https://www.reddit.com/r/${subreddit}/top.json?t=day&limit=8`;
+  const headers = {
+    'User-Agent': 'WaveLength/1.0 (ocean science aggregator; non-commercial)',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const response = await axios.get(url, { timeout: 8000, headers });
 
   const posts = response.data?.data?.children || [];
   return posts
     .map((p) => p.data)
     .filter((p) => !p.is_self && p.url && p.title && p.score > 50)
     .map((p) => ({
-      title: p.title,
-      source: `Reddit r/${subreddit}`,
-      url: p.url.startsWith('/r/') ? `https://reddit.com${p.url}` : p.url,
+      title:        p.title,
+      source:       `Reddit r/${subreddit}`,
+      url:          p.url.startsWith('/r/') ? `https://reddit.com${p.url}` : p.url,
       published_at: new Date(p.created_utc * 1000).toISOString(),
-      raw_body: p.selftext?.slice(0, 500) || '',
+      raw_body:     p.selftext?.slice(0, 500) || '',
       category,
       reddit_score: p.score,
     }));
@@ -362,23 +395,104 @@ async function fetchFromYouTube(channelId, channelName, category) {
   }).filter((s) => s.title && s.url);
 }
 
+// ── Title cleaning & quality filtering ───────────────────────────────────────
+
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&[a-z]+;/gi, '');
+}
+
+function cleanTitle(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let t = raw.trim();
+
+  // Decode HTML entities first
+  t = decodeHtmlEntities(t);
+
+  // Strip leading "RE:", "RT:", reply/retweet markers
+  t = t.replace(/^(RE|RT|FWD|THREAD):\s*/i, '');
+
+  // Strip URLs (http/https)
+  t = t.replace(/https?:\/\/\S+/g, '');
+
+  // Strip emoji (broad unicode ranges)
+  t = t.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
+  t = t.replace(/[\u{2600}-\u{27FF}]/gu, '');
+
+  // Collapse whitespace
+  t = t.replace(/\s+/g, ' ').trim();
+
+  // Truncate to 220 chars
+  if (t.length > 220) t = t.slice(0, 220).trim();
+
+  return t;
+}
+
+// Returns true if the title looks like a garbage social post rather than a news headline
+function isTitleJunk(title) {
+  if (!title || title.length < 15) return true;
+
+  // Mostly hashtags — count # occurrences vs word count
+  const hashtagCount = (title.match(/#\w+/g) || []).length;
+  const wordCount    = title.split(/\s+/).length;
+  if (hashtagCount > 0 && hashtagCount / wordCount > 0.4) return true;
+
+  // Price listings (Amazon deals, etc.)
+  if (/^\$[\d.]+\s*\|/.test(title)) return true;
+
+  // Starts with emoji or punctuation thread markers
+  if (/^[🧵👇💡📚☢️🌡️*]/.test(title)) return true;
+
+  // Mostly uppercase acronym spam (e.g. "#AE #AECH2 #TruthWarriors")
+  const allCapsWords = (title.match(/\b[A-Z]{3,}\b/g) || []).length;
+  if (allCapsWords / wordCount > 0.6) return true;
+
+  // Mastodon reply-style openers with no real content
+  if (/^@\w+/.test(title)) return true;
+
+  return false;
+}
+
 async function saveStories(stories) {
   let saved = 0;
+  let skippedJunk = 0;
   for (const story of stories) {
     if (!story.title || !story.url) continue;
+
+    const cleanedTitle = cleanTitle(story.title);
+    if (isTitleJunk(cleanedTitle)) {
+      skippedJunk++;
+      continue;
+    }
+
+    // Reject stories older than 14 days — prevents RSS feeds from surfacing stale content
+    const pubDate = story.published_at ? new Date(story.published_at) : null;
+    if (!pubDate || isNaN(pubDate.getTime()) || Date.now() - pubDate.getTime() > 14 * 24 * 60 * 60 * 1000) {
+      skippedJunk++;
+      continue;
+    }
+
     try {
       const result = await pool.query(
         `INSERT INTO stories (title, source, url, published_at, category, raw_body)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (url) DO NOTHING
          RETURNING id`,
-        [story.title, story.source, story.url, story.published_at, story.category, story.raw_body]
+        [cleanedTitle, story.source, story.url, story.published_at, story.category, story.raw_body]
       );
       if (result.rowCount > 0) saved++;
     } catch (err) {
       console.error('Failed to save story:', story.title, err.message);
     }
   }
+  if (skippedJunk > 0) console.log(`[Aggregator] Skipped ${skippedJunk} junk titles`);
   return saved;
 }
 

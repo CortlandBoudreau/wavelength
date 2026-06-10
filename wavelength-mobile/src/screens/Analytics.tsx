@@ -72,8 +72,23 @@ export default function Analytics({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [affinityLoading, setAffinityLoading] = useState(true);
 
-  // Analytics requires a logged-in account (free or pro) — show upsell for guests
-  // and a "start using the app" nudge for free users who haven't interacted yet.
+  // Hooks must all be declared before any early return
+  useEffect(() => {
+    if (isGuest) return;
+    client
+      .get<AnalyticsData>("/analytics")
+      .then((r) => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+
+    client
+      .get<{ affinity: AffinityRow[] }>("/analytics/affinity")
+      .then((r) => setAffinity(r.data.affinity ?? []))
+      .catch(() => {})
+      .finally(() => setAffinityLoading(false));
+  }, [isGuest]);
+
+  // Guest upsell — rendered after all hooks are declared
   if (isGuest) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#F5F0E8" }} edges={["top", "left", "right"]}>
@@ -101,20 +116,6 @@ export default function Analytics({ navigation }: { navigation: any }) {
       </SafeAreaView>
     );
   }
-
-  useEffect(() => {
-    client
-      .get<AnalyticsData>("/analytics")
-      .then((r) => setData(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-
-    client
-      .get<{ affinity: AffinityRow[] }>("/analytics/affinity")
-      .then((r) => setAffinity(r.data.affinity ?? []))
-      .catch(() => {})
-      .finally(() => setAffinityLoading(false));
-  }, []);
 
   // Normalise to the flat totals shape whether the backend returns nested or flat
   const totals = data?.totals ?? {

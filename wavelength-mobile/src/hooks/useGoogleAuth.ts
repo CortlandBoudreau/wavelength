@@ -6,16 +6,8 @@
  * access token on success.
  *
  * Required env vars (set in .env / eas.json):
- *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   — Web client ID from Google Cloud Console
- *
- * Google Cloud Console setup:
- *   1. Create a project at console.cloud.google.com
- *   2. APIs & Services → Credentials → Create OAuth client ID
- *   3. Application type: Web application
- *   4. Authorized redirect URIs — add ALL of these:
- *        https://auth.expo.io/@cboudreaus-organization/wavelength
- *        wavelength://
- *   5. Copy the Web client ID into EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+ *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      — Web client ID from Google Cloud Console
+ *   EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID  — Android client ID from Google Cloud Console
  */
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
@@ -23,11 +15,19 @@ import * as WebBrowser from "expo-web-browser";
 // Required: completes the auth session if the app was opened via the redirect URI
 WebBrowser.maybeCompleteAuthSession();
 
+const GOOGLE_WEB_CLIENT_ID     = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+
 export function useGoogleAuth() {
+  // Always pass a config object — expo-auth-session crashes if given null.
+  // When unconfigured we pass dummy IDs; isAvailable=false hides the button
+  // so promptAsync is never actually called.
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    // scopes default to openid + profile + email — that's all we need
+    webClientId:     GOOGLE_WEB_CLIENT_ID     ?? 'unconfigured',
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID ?? 'unconfigured',
   });
 
-  return { request, response, promptAsync } as const;
+  const isAvailable = !!(GOOGLE_WEB_CLIENT_ID && GOOGLE_ANDROID_CLIENT_ID);
+
+  return { request, response, promptAsync, isAvailable } as const;
 }
