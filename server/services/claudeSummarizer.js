@@ -166,7 +166,7 @@ async function summarizeStory(story, engagementProfile) {
   // ── Claude summarization ──────────────────────────────────────────────────
   // Default to Haiku — fast, cheap, and sufficient for structured JSON extraction.
   // Override with SUMMARIZER_MODEL env var if you need higher quality (e.g. claude-sonnet-4-6).
-  const summarizerModel = process.env.SUMMARIZER_MODEL ?? 'claude-haiku-4-6';
+  const summarizerModel = process.env.SUMMARIZER_MODEL ?? 'claude-haiku-4-5-20251001';
   const message = await client.messages.create({
     model: summarizerModel,
     max_tokens: 700,
@@ -219,8 +219,11 @@ async function summarizeUnsummarized() {
     5
   );
 
-  const failed = results.filter((r) => r.status === 'rejected').length;
-  if (failed) console.warn(`[Summarizer] ${failed} stories failed to summarize.`);
+  const failed = results.filter((r) => r.status === 'rejected');
+  if (failed.length) {
+    console.warn(`[Summarizer] ${failed.length} stories failed to summarize.`);
+    if (failed[0]) console.error('[Summarizer] First error:', failed[0].reason?.message ?? failed[0].reason);
+  }
   console.log(`[Summarizer] Done. ${done}/${stories.length} summarized.`);
   return done;
 }

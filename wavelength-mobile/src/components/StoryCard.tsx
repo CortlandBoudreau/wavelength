@@ -16,7 +16,9 @@ function relativeTime(iso: string): string {
   const h = Math.floor(diff / 3600000);
   if (h < 1) return "just now";
   if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  const d = Math.floor(h / 24);
+  if (d > 14) return "14d+ ago";
+  return `${d}d ago`;
 }
 
 export default function StoryCard({ story, onPress, viewed = false }: Props) {

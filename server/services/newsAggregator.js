@@ -240,25 +240,58 @@ async function fetchFromRSS(feedUrl, category) {
   }));
 }
 
-async function fetchFromReddit(subreddit, category) {
-  const response = await axios.get(
-    `https://www.reddit.com/r/${subreddit}/top.json?t=day&limit=8`,
+// ── Reddit OAuth token cache ──────────────────────────────────────────────────
+const redditToken = { value: null, expiresAt: 0 };
+
+async function getRedditToken() {
+  if (redditToken.value && Date.now() < redditToken.expiresAt) return redditToken.value;
+
+  const clientId     = process.env.REDDIT_CLIENT_ID;
+  const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null; // not configured yet
+
+  const resp = await axios.post(
+    'https://www.reddit.com/api/v1/access_token',
+    'grant_type=client_credentials',
     {
+      auth: { username: clientId, password: clientSecret },
+      headers: {
+        'User-Agent':   'WaveLength/1.0 (ocean science aggregator; non-commercial)',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       timeout: 8000,
-      headers: { 'User-Agent': 'WaveLength/1.0 (ocean science content aggregator)' },
     }
   );
+
+  redditToken.value     = resp.data.access_token;
+  redditToken.expiresAt = Date.now() + (resp.data.expires_in - 60) * 1000; // 1-min buffer
+  return redditToken.value;
+}
+
+async function fetchFromReddit(subreddit, category) {
+  const token = await getRedditToken();
+
+  // Fall back to unauthenticated .json endpoint if credentials not yet configured
+  const url     = token
+    ? `https://oauth.reddit.com/r/${subreddit}/top.json?t=day&limit=8`
+    : `https://www.reddit.com/r/${subreddit}/top.json?t=day&limit=8`;
+  const headers = {
+    'User-Agent': 'WaveLength/1.0 (ocean science aggregator; non-commercial)',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const response = await axios.get(url, { timeout: 8000, headers });
 
   const posts = response.data?.data?.children || [];
   return posts
     .map((p) => p.data)
     .filter((p) => !p.is_self && p.url && p.title && p.score > 50)
     .map((p) => ({
-      title: p.title,
-      source: `Reddit r/${subreddit}`,
-      url: p.url.startsWith('/r/') ? `https://reddit.com${p.url}` : p.url,
+      title:        p.title,
+      source:       `Reddit r/${subreddit}`,
+      url:          p.url.startsWith('/r/') ? `https://reddit.com${p.url}` : p.url,
       published_at: new Date(p.created_utc * 1000).toISOString(),
-      raw_body: p.selftext?.slice(0, 500) || '',
+      raw_body:     p.selftext?.slice(0, 500) || '',
       category,
       reddit_score: p.score,
     }));
@@ -435,6 +468,13 @@ async function saveStories(stories) {
 
     const cleanedTitle = cleanTitle(story.title);
     if (isTitleJunk(cleanedTitle)) {
+      skippedJunk++;
+      continue;
+    }
+
+    // Reject stories older than 14 days — prevents RSS feeds from surfacing stale content
+    const pubDate = story.published_at ? new Date(story.published_at) : null;
+    if (!pubDate || isNaN(pubDate.getTime()) || Date.now() - pubDate.getTime() > 14 * 24 * 60 * 60 * 1000) {
       skippedJunk++;
       continue;
     }

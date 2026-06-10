@@ -10,7 +10,9 @@
       "env": {
         "APP_ENV": "development",
         "EXPO_PUBLIC_API_URL": "https://wavelength-staging.up.railway.app/api",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE"
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "203082930898-2mq36u885k4d11n0d8113p3gf08hqc4r.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "203082930898-qjsgfctb462itmabpkhnau54g23tfg9d.apps.googleusercontent.com"
       }
     },
     "preview": {
@@ -21,7 +23,9 @@
       "env": {
         "APP_ENV": "staging",
         "EXPO_PUBLIC_API_URL": "https://wavelength-staging.up.railway.app/api",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE"
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "203082930898-2mq36u885k4d11n0d8113p3gf08hqc4r.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "203082930898-qjsgfctb462itmabpkhnau54g23tfg9d.apps.googleusercontent.com"
       }
     },
     "production": {
@@ -31,7 +35,9 @@
       "env": {
         "APP_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://wavelength-production-de44.up.railway.app/api",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE"
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_UWGxpsUJwcjvqhTIKDNTgOlAFoE",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "203082930898-2mq36u885k4d11n0d8113p3gf08hqc4r.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "203082930898-qjsgfctb462itmabpkhnau54g23tfg9d.apps.googleusercontent.com"
       }
     }
   },

@@ -55,16 +55,16 @@ export default function Dashboard() {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Collapsing header animation
+  // Collapsing header animation — translateY + opacity run on UI thread (native driver)
   const scrollY = useRef(new Animated.Value(0)).current;
-  const collapseAnim = scrollY.interpolate({
+  const headerTranslateY = scrollY.interpolate({
     inputRange: [0, COLLAPSE_HEIGHT],
-    outputRange: [1, 0],
+    outputRange: [0, -COLLAPSE_HEIGHT],
     extrapolate: "clamp",
   });
-  const collapseHeight = scrollY.interpolate({
-    inputRange: [0, COLLAPSE_HEIGHT],
-    outputRange: [COLLAPSE_HEIGHT, 0],
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, COLLAPSE_HEIGHT * 0.65],
+    outputRange: [1, 0],
     extrapolate: "clamp",
   });
 
@@ -167,14 +167,16 @@ export default function Dashboard() {
         </View>
       </Animated.View>
 
-      {/* ── Collapsing header (logo + search + sort) ───────── */}
+      {/* ── Collapsing header (logo + search) ───────────────
+            Fixed-height clip container — no layout change on scroll.
+            Inner view translates up + fades out via native driver.     */}
+      <View style={{ height: COLLAPSE_HEIGHT, overflow: "hidden", backgroundColor: "#1a2a3a" }}>
       <Animated.View style={{
-        overflow: "hidden",
-        height: collapseHeight,
-        opacity: collapseAnim,
-        backgroundColor: "#1a2a3a",
+        height: COLLAPSE_HEIGHT,
         paddingHorizontal: 16,
         paddingTop: 10,
+        transform: [{ translateY: headerTranslateY }],
+        opacity: headerOpacity,
       }}>
         {/* Logo row */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -209,6 +211,7 @@ export default function Dashboard() {
           )}
         </View>
       </Animated.View>
+      </View>
 
       {/* ── Always-visible sticky bar (sort chips + category tabs) ── */}
       <View style={{ backgroundColor: "#1a2a3a", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
@@ -275,7 +278,7 @@ export default function Dashboard() {
             keyExtractor={(item) => item.id}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false }
+              { useNativeDriver: true }
             )}
             scrollEventThrottle={16}
             renderItem={({ item }) => (
