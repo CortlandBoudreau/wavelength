@@ -49,9 +49,10 @@ router.post('/rate', requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/sources/rate — remove a user's rating for a source
+// DELETE /api/sources/rate?source=... — remove a user's rating for a source.
+// Query param preferred (DELETE bodies are dropped by some proxies); body accepted as fallback.
 router.delete('/rate', requireAuth, async (req, res) => {
-  const { source } = req.body;
+  const source = typeof req.query.source === 'string' ? req.query.source : req.body?.source;
   if (typeof source !== 'string' || source.trim().length === 0) {
     return res.status(400).json({ error: 'Invalid source' });
   }

@@ -18,11 +18,15 @@ interface AuthContextValue {
   isLoading: boolean;
   needsOnboarding: boolean;
   guestInterests: string[];
+  pendingAuthRoute: "register" | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string, interests?: string[]) => Promise<void>;
   loginWithGoogle: (accessToken: string) => Promise<void>;
   loginAsGuest: () => void;
   logout: () => Promise<void>;
+  /** Logs out and flags Landing to redirect straight to Register. */
+  logoutToRegister: () => Promise<void>;
+  clearPendingAuthRoute: () => void;
   completeOnboarding: (interests: string[]) => Promise<void>;
   /** Re-fetch /auth/me and update user state — call after subscription changes. */
   refreshUser: () => Promise<void>;
@@ -37,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading]     = useState(true);
   const [guestOnboarded, setGuestOnboarded] = useState(false);
   const [guestInterests, setGuestInterests] = useState<string[]>([]);
+  const [pendingAuthRoute, setPendingAuthRoute] = useState<"register" | null>(null);
   const interceptorRef = useRef<number | null>(null);
 
   // Attach a 401 interceptor so expired tokens auto-logout with a clear message
@@ -145,6 +150,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsGuest(false);
   };
 
+  const logoutToRegister = async () => {
+    setPendingAuthRoute("register");
+    await logout();
+  };
+
+  const clearPendingAuthRoute = () => setPendingAuthRoute(null);
+
   /** Re-fetch the current user from the server and update state. */
   const refreshUser = async () => {
     try {
@@ -173,8 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, token, isGuest, isLoading,
-      needsOnboarding, guestInterests,
-      login, register, loginWithGoogle, loginAsGuest, logout, completeOnboarding, refreshUser,
+      needsOnboarding, guestInterests, pendingAuthRoute,
+      login, register, loginWithGoogle, loginAsGuest, logout, logoutToRegister, clearPendingAuthRoute, completeOnboarding, refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

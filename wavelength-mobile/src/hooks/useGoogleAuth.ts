@@ -19,15 +19,16 @@ const GOOGLE_WEB_CLIENT_ID     = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 
 export function useGoogleAuth() {
-  // Always pass a config object — expo-auth-session crashes if given null.
-  // When unconfigured we pass dummy IDs; isAvailable=false hides the button
-  // so promptAsync is never actually called.
+  // Android standalone builds use the androidClientId — no redirect URI needed,
+  // Google identifies the app via package name + SHA-1 on the Android credential.
+  // webClientId is still required for the server-side token exchange.
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId:     GOOGLE_WEB_CLIENT_ID     ?? 'unconfigured',
     androidClientId: GOOGLE_ANDROID_CLIENT_ID ?? 'unconfigured',
   });
 
-  const isAvailable = !!(GOOGLE_WEB_CLIENT_ID && GOOGLE_ANDROID_CLIENT_ID);
+  // Disabled until native Google Sign-In (@react-native-google-signin) is integrated
+  const isAvailable = false;
 
   return { request, response, promptAsync, isAvailable } as const;
 }

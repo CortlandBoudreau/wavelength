@@ -22,16 +22,13 @@ Notifications.setNotificationHandler({
  */
 export async function scheduleDailyDigest(): Promise<void> {
   try {
-    const already = await AsyncStorage.getItem(SCHEDULED_KEY);
-    if (already === "true") return;
+    const existingId = await AsyncStorage.getItem(SCHEDULED_KEY);
+    if (existingId) return; // already scheduled
 
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== "granted") return;
 
-    // Clear any leftover schedules from previous installs
-    await Notifications.cancelAllScheduledNotificationsAsync();
-
-    await Notifications.scheduleNotificationAsync({
+    const notifId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Your science digest is ready 🌊",
         body: "Fresh stories curated for you today.",
@@ -43,7 +40,7 @@ export async function scheduleDailyDigest(): Promise<void> {
       },
     });
 
-    await AsyncStorage.setItem(SCHEDULED_KEY, "true");
+    await AsyncStorage.setItem(SCHEDULED_KEY, notifId);
 
     // Register the Expo push token with the server so topic burst alerts can
     // be delivered as server-initiated push notifications.
@@ -90,7 +87,10 @@ export async function deregisterPushToken(): Promise<void> {
  */
 export async function cancelDailyDigest(): Promise<void> {
   try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    await AsyncStorage.removeItem(SCHEDULED_KEY);
+    const notifId = await AsyncStorage.getItem(SCHEDULED_KEY);
+    if (notifId) {
+      await Notifications.cancelScheduledNotificationAsync(notifId).catch(() => {});
+      await AsyncStorage.removeItem(SCHEDULED_KEY);
+    }
   } catch {}
 }

@@ -50,7 +50,9 @@ router.get('/', optionalAuth, async (req, res) => {
       conditions.push(`i.favorited = TRUE`);
     }
     if (sinceHours) {
-      conditions.push(`s.published_at > NOW() - INTERVAL '${sinceHours} hours'`);
+      // Clamp to integer to prevent injection — PostgreSQL doesn't support parameterised INTERVALs
+      const safeHours = Math.max(1, Math.min(720, parseInt(sinceHours, 10) || 24));
+      conditions.push(`s.published_at > NOW() - INTERVAL '${safeHours} hours'`);
     }
 
     // Personalization gate: low-affinity categories only show high-traction stories.

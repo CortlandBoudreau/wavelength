@@ -45,10 +45,14 @@ export default function Register({ navigation, route }: Props) {
   }, [googleResponse]);
 
   const passwordsMatch = confirmPassword.length === 0 || password === confirmPassword;
+  const pwHasLength  = password.length >= 8;
+  const pwHasNumber  = /\d/.test(password);
+  const pwHasSpecial = /[^a-zA-Z0-9]/.test(password);
+  const passwordValid = pwHasLength && pwHasNumber && pwHasSpecial;
   const canSubmit =
     name.trim().length > 0 &&
     email.trim().length > 0 &&
-    password.length >= 8 &&
+    passwordValid &&
     password === confirmPassword;
 
   const handleRegister = async () => {
@@ -126,14 +130,36 @@ export default function Register({ navigation, route }: Props) {
               onChangeText={setEmail}
             />
             <TextInput
-              style={inputStyle}
-              placeholder="Password (min 8 characters)"
+              style={{
+                ...inputStyle,
+                marginBottom: password.length > 0 ? 6 : 12,
+                borderColor: password.length > 0 && !passwordValid ? "#e05c5c" : "#e0e7ef",
+              }}
+              placeholder="Password"
               placeholderTextColor="#6b7a8d"
               secureTextEntry
               returnKeyType="next"
               value={password}
               onChangeText={setPassword}
             />
+            {password.length > 0 && (
+              <View style={{ marginBottom: 12, gap: 3 }}>
+                {[
+                  { ok: pwHasLength,  label: "At least 8 characters" },
+                  { ok: pwHasNumber,  label: "Contains a number" },
+                  { ok: pwHasSpecial, label: "Contains a special character (!@#$ etc.)" },
+                ].map(({ ok, label }) => (
+                  <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons
+                      name={ok ? "checkmark-circle" : "close-circle"}
+                      size={13}
+                      color={ok ? "#22c55e" : "#e05c5c"}
+                    />
+                    <Text style={{ color: ok ? "#22c55e" : "#e05c5c", fontSize: 12 }}>{label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <TextInput
               style={{
                 ...inputStyle,
@@ -171,33 +197,34 @@ export default function Register({ navigation, route }: Props) {
 
           {/* Fixed footer — always visible above keyboard */}
           <View style={{ paddingHorizontal: 24, paddingBottom: 12, paddingTop: 8, backgroundColor: "#0f1e2d" }}>
-            {/* Google Sign-Up — only shown when EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is configured */}
-            {googleAvailable && <Pressable
-              onPress={() => googlePrompt()}
-              disabled={loading || !googleRequest}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "#ffffff",
-                borderRadius: 14,
-                paddingVertical: 14,
-                marginBottom: 10,
-                opacity: loading || !googleRequest ? 0.6 : 1,
-              }}
-            >
-              <Ionicons name="logo-google" size={18} color="#DB4437" style={{ marginRight: 8 }} />
-              <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
-                Continue with Google
-              </Text>
-            </Pressable>}
-
-            {/* Divider */}
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
-              <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
-              <Text style={{ color: "#5a7a94", fontSize: 12, marginHorizontal: 10 }}>or sign up with email</Text>
-              <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
-            </View>
+            {googleAvailable && (
+              <>
+                <Pressable
+                  onPress={() => googlePrompt()}
+                  disabled={loading || !googleRequest}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 14,
+                    paddingVertical: 14,
+                    marginBottom: 10,
+                    opacity: loading || !googleRequest ? 0.6 : 1,
+                  }}
+                >
+                  <Ionicons name="logo-google" size={18} color="#DB4437" style={{ marginRight: 8 }} />
+                  <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
+                    Continue with Google
+                  </Text>
+                </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
+                  <Text style={{ color: "#5a7a94", fontSize: 12, marginHorizontal: 10 }}>or sign up with email</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
+                </View>
+              </>
+            )}
 
             {/* Email Registration */}
             <Pressable

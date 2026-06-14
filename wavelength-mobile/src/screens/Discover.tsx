@@ -13,6 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { fetchTrendingHashtags, fetchTopicMoments, type TopicMoment, type TrendingHashtag } from "../api/trending";
+import { GUEST_DAILY_LIMIT, recordGuestStoryView } from "../utils/guestStorage";
+import { useAuth } from "../context/AuthContext";
 import HashtagPill from "../components/HashtagPill";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
@@ -20,6 +22,7 @@ type DiscoverNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function Discover() {
   const navigation = useNavigation<DiscoverNav>();
+  const { isGuest } = useAuth();
   const [trending, setTrending] = useState<TrendingHashtag[]>([]);
   const [topics, setTopics] = useState<TopicMoment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +50,19 @@ export default function Discover() {
     await load();
     setRefreshing(false);
   };
+
+  // Same guest gate as the Dashboard — a topic moment opens a full story,
+  // so it must count against (and respect) the free daily limit.
+  const handleTopicPress = useCallback(async (storyId: string) => {
+    if (isGuest) {
+      const { alreadySeen, total } = await recordGuestStoryView(storyId);
+      if (!alreadySeen && total >= GUEST_DAILY_LIMIT) {
+        navigation.navigate("Paywall");
+        return;
+      }
+    }
+    navigation.navigate("StoryDetail", { storyId });
+  }, [isGuest, navigation]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["top", "left", "right"]}>
@@ -108,7 +124,7 @@ export default function Discover() {
                     key={topic.id}
                     onPress={() => {
                       if (topic.top_story?.id) {
-                        navigation.navigate("StoryDetail", { storyId: topic.top_story.id });
+                        handleTopicPress(topic.top_story.id);
                       }
                     }}
                     style={{

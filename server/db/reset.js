@@ -48,11 +48,11 @@ async function applySchema(client) {
   console.log('   ✓ Schema applied');
 }
 
-async function runPipeline(label) {
+async function runPipeline(label, opts = {}) {
   console.log(`\n🔄 Pipeline run: ${label}`);
-  const stories = await runAggregation();
+  await runAggregation(opts);
   console.log(`   ✓ Aggregated`);
-  const summaries = await summarizeUnsummarized();
+  await summarizeUnsummarized();
   console.log(`   ✓ Summarised`);
   await clusterRecentStories();
   console.log(`   ✓ Clustered`);
@@ -74,8 +74,10 @@ async function runPipeline(label) {
     client.release();
   }
 
-  await runPipeline('first');
-  await runPipeline('second');
+  // Skip NewsAPI for both reset runs — RSS/YouTube/Mastodon is enough to seed
+  // the DB, and NewsAPI has a 100 req/day cap that resets burn through fast.
+  await runPipeline('first',  { skipNewsAPI: true });
+  await runPipeline('second', { skipNewsAPI: true });
 
   console.log('\n✅  Reset complete. Database is fresh with two rounds of stories.');
   process.exit(0);

@@ -36,6 +36,8 @@ function validateRegister(req, res, next) {
   if (name.length < 1 || name.length > 80) return err(res, 'Name must be 1–80 characters');
   if (password.length < 8) return err(res, 'Password must be at least 8 characters');
   if (password.length > 128) return err(res, 'Password too long');
+  if (!/\d/.test(password)) return err(res, 'Password must contain at least one number');
+  if (!/[^a-zA-Z0-9]/.test(password)) return err(res, 'Password must contain at least one special character');
   next();
 }
 

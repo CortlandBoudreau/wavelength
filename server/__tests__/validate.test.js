@@ -61,7 +61,7 @@ describe('validateRegister', () => {
 
   test('passes valid registration data', () => {
     const res = mockRes();
-    validateRegister(mockReq({ email: 'user@example.com', name: 'Alice', password: 'secure123' }), res, next);
+    validateRegister(mockReq({ email: 'user@example.com', name: 'Alice', password: 'secure123!' }), res, next);
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
   });

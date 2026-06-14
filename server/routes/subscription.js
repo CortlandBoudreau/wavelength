@@ -56,23 +56,28 @@ router.post('/redeem', requireAuth, async (req, res) => {
   const normalised = code.trim().toUpperCase();
 
   try {
-    // 1. Look up the code
+    await pool.query('BEGIN');
+
+    // 1. Lock the promo code row so concurrent requests queue here, not race
     const { rows: codeRows } = await pool.query(
-      'SELECT * FROM promo_codes WHERE code = $1',
+      'SELECT * FROM promo_codes WHERE code = $1 FOR UPDATE',
       [normalised]
     );
     if (!codeRows.length) {
+      await pool.query('ROLLBACK');
       return res.status(404).json({ error: 'Invalid promo code' });
     }
     const promo = codeRows[0];
 
     // 2. Check it hasn't expired
     if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
+      await pool.query('ROLLBACK');
       return res.status(410).json({ error: 'This promo code has expired' });
     }
 
-    // 3. Check usage cap
+    // 3. Check usage cap — inside the lock so the count is accurate
     if (promo.max_uses !== null && promo.used_count >= promo.max_uses) {
+      await pool.query('ROLLBACK');
       return res.status(410).json({ error: 'This promo code has reached its usage limit' });
     }
 
@@ -82,6 +87,7 @@ router.post('/redeem', requireAuth, async (req, res) => {
       [req.user.id, normalised]
     );
     if (alreadyUsed.length) {
+      await pool.query('ROLLBACK');
       return res.status(409).json({ error: 'You have already redeemed this code' });
     }
 
@@ -93,7 +99,6 @@ router.post('/redeem', requireAuth, async (req, res) => {
       newTier   = 'lifetime';
       newExpiry = null;
     } else {
-      // pro access for duration_days — stack on top of any existing expiry
       newTier = 'pro';
       const { rows: userRows } = await pool.query(
         'SELECT subscription_tier, subscription_expires_at FROM users WHERE id = $1',
@@ -101,8 +106,8 @@ router.post('/redeem', requireAuth, async (req, res) => {
       );
       const existing = userRows[0];
 
-      // Don't downgrade a lifetime user
       if (existing.subscription_tier === 'lifetime') {
+        await pool.query('ROLLBACK');
         return res.status(409).json({ error: 'Your account already has lifetime access' });
       }
 
@@ -113,8 +118,7 @@ router.post('/redeem', requireAuth, async (req, res) => {
       newExpiry = new Date(base.getTime() + promo.duration_days * 24 * 60 * 60 * 1000);
     }
 
-    // 6. Apply in a transaction
-    await pool.query('BEGIN');
+    // 6. Apply all changes atomically
     await pool.query(
       `UPDATE users SET subscription_tier = $1, subscription_expires_at = $2 WHERE id = $3`,
       [newTier, newExpiry, req.user.id]
@@ -212,9 +216,13 @@ router.post('/revenuecat-sync', requireAuth, async (req, res) => {
 // Configure the webhook URL in the RevenueCat dashboard and set a shared secret.
 // RevenueCat dashboard: Project → Webhooks → Authorization header value
 router.post('/webhook/revenuecat', async (req, res) => {
-  // Verify shared secret if configured
+  // Verify shared secret — fail closed: if secret is not configured, reject all requests
   const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  if (!secret) {
+    console.error('[RC Webhook] REVENUECAT_WEBHOOK_SECRET is not set — rejecting request');
+    return res.status(401).json({ error: 'Webhook not configured' });
+  }
+  if (req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

@@ -30,6 +30,7 @@ function startScheduler() {
   // ── Aggregation pipeline ────────────────────────────────────────────────────
   // AGGREGATION_RUNS_PER_DAY controls how many times per day the full pipeline
   // runs (fetch → summarize → cluster → decay → burst detection).
+  //   0 = aggregation fully paused (no scheduled runs)
   //   1 = once daily at 10:00 AM  (staging / dev — cheapest)
   //   2 = 10:00 AM + 4:00 PM      (moderate)
   //   3 = 2:00 AM + 10:00 AM + 4:00 PM (production default)
@@ -54,33 +55,47 @@ function startScheduler() {
     cron.schedule('0 2 * * *', () => runPipeline('overnight'));
   }
 
-  // 10:00 AM — morning news cycle (always runs)
-  cron.schedule('0 10 * * *', () => runPipeline('morning'));
+  // 10:00 AM — morning news cycle (runs unless aggregation is fully paused)
+  if (runsPerDay >= 1) {
+    cron.schedule('0 10 * * *', () => runPipeline('morning'));
+  }
 
   // 4:00 PM — afternoon publications (runs=2 or 3)
   if (runsPerDay >= 2) {
     cron.schedule('0 16 * * *', () => runPipeline('afternoon'));
   }
 
-  // 8:00 AM daily — send email digest
-  cron.schedule('0 8 * * *', async () => {
-    console.log('[Scheduler] Sending morning digest...');
-    try {
-      await sendDigest();
-    } catch (err) {
-      console.error('[Scheduler] Digest error:', err);
-    }
-  });
+  // Outbound email jobs (digest + posting reminders) go to the admin EMAIL_TO.
+  // Set EMAIL_JOBS_ENABLED=0 (or false/off/no) to silence a service — e.g. on
+  // staging, or on production while no one is using the app — otherwise every
+  // running service fires its own 8am digest to the same address (duplicates).
+  // Default (unset) = enabled.
+  const emailFlag = (process.env.EMAIL_JOBS_ENABLED ?? '').trim().toLowerCase();
+  const emailJobsEnabled = !['0', 'false', 'off', 'no'].includes(emailFlag);
 
-  // 8:00 PM daily — posting reminder (after the day's content window has passed)
-  cron.schedule('0 20 * * *', async () => {
-    console.log('[Scheduler] Sending posting reminders...');
-    try {
-      await sendPostingReminders();
-    } catch (err) {
-      console.error('[Scheduler] Posting reminder error:', err);
-    }
-  });
+  if (emailJobsEnabled) {
+    // 8:00 AM daily — send email digest
+    cron.schedule('0 8 * * *', async () => {
+      console.log('[Scheduler] Sending morning digest...');
+      try {
+        await sendDigest();
+      } catch (err) {
+        console.error('[Scheduler] Digest error:', err);
+      }
+    });
+
+    // 8:00 PM daily — posting reminder (after the day's content window has passed)
+    cron.schedule('0 20 * * *', async () => {
+      console.log('[Scheduler] Sending posting reminders...');
+      try {
+        await sendPostingReminders();
+      } catch (err) {
+        console.error('[Scheduler] Posting reminder error:', err);
+      }
+    });
+  } else {
+    console.log('[Scheduler] EMAIL_JOBS_ENABLED=false — skipping digest & posting reminders');
+  }
 
   // 3:00 AM daily — soft-delete old stories + expire old topic moments
   cron.schedule('0 3 * * *', async () => {
@@ -93,7 +108,7 @@ function startScheduler() {
     }
   });
 
-  console.log('[Scheduler] Cron jobs registered (3am cleanup, 6am aggregate, 8am digest)');
+  console.log(`[Scheduler] Cron jobs registered (cleanup, aggregation, email jobs ${emailJobsEnabled ? 'ON' : 'OFF'})`);
 }
 
 module.exports = { startScheduler };

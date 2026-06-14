@@ -8,6 +8,16 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const VALID_TYPES = new Set(['bug', 'feature', 'general']);
 
+// Escape user content before inserting into the HTML email
+function esc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 // POST /api/feedback
 router.post('/', optionalAuth, async (req, res) => {
   const { type, message } = req.body;
@@ -56,8 +66,8 @@ router.post('/', optionalAuth, async (req, res) => {
           html: `
             <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
               <h2 style="color:#1a2a3a">${typeLabel}</h2>
-              <p style="color:#6b7a8d;font-size:13px">From: <strong>${userLabel}</strong></p>
-              <div style="background:#f5f0e8;border-radius:8px;padding:16px;margin-top:12px;white-space:pre-wrap;font-size:15px;color:#1a2a3a">${trimmed}</div>
+              <p style="color:#6b7a8d;font-size:13px">From: <strong>${esc(userLabel)}</strong></p>
+              <div style="background:#f5f0e8;border-radius:8px;padding:16px;margin-top:12px;white-space:pre-wrap;font-size:15px;color:#1a2a3a">${esc(trimmed)}</div>
             </div>
           `,
         });

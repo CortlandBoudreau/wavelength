@@ -14,6 +14,16 @@ const CATEGORY_LABELS = {
   health_science: '🧠 Health Science',
 };
 
+// Fallback for categories without an explicit label (e.g. ecology, conservation,
+// deep_sea): replace underscores with spaces and Title Case each word.
+function formatCategory(cat) {
+  if (CATEGORY_LABELS[cat]) return CATEGORY_LABELS[cat];
+  return String(cat || '')
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 // Escape all user/external-sourced content before inserting into HTML
 function esc(value) {
   return String(value ?? '')
@@ -65,7 +75,7 @@ function buildHtml(stories) {
     }).join('');
 
     return `
-      <h2 style="color:#4A9EDB;border-bottom:1px solid #eee;padding-bottom:8px;">${esc(CATEGORY_LABELS[cat] || cat)}</h2>
+      <h2 style="color:#4A9EDB;border-bottom:1px solid #eee;padding-bottom:8px;">${esc(formatCategory(cat))}</h2>
       ${items}`;
   }).join('');
 
@@ -102,7 +112,9 @@ async function getDigestStories(limit = 12) {
   return rows;
 }
 
-async function sendDigest() {
+// toEmail: recipient address. Defaults to EMAIL_TO (admin) for the scheduled
+// daily run; the user-facing /api/digest/send route passes the user's own email.
+async function sendDigest(toEmail = process.env.EMAIL_TO) {
   const stories = await getDigestStories();
   if (!stories.length) {
     console.log('[Digest] No stories to send.');
@@ -113,7 +125,7 @@ async function sendDigest() {
   const storyIds = stories.map((s) => s.id);
 
   const msg = {
-    to: process.env.EMAIL_TO,
+    to: toEmail,
     from: process.env.EMAIL_FROM,
     subject: `WaveLength Digest — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
     html,
@@ -125,7 +137,7 @@ async function sendDigest() {
       `INSERT INTO digests (sent_at, story_ids, status) VALUES (NOW(), $1, 'sent')`,
       [JSON.stringify(storyIds)]
     );
-    console.log(`[Digest] Sent digest with ${stories.length} stories to ${process.env.EMAIL_TO}`);
+    console.log(`[Digest] Sent digest with ${stories.length} stories to ${toEmail}`);
   } catch (err) {
     await pool.query(
       `INSERT INTO digests (sent_at, story_ids, status) VALUES (NOW(), $1, 'failed')`,

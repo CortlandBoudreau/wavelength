@@ -72,14 +72,18 @@ export function useNotificationPrefs(isLoggedIn: boolean) {
       await AsyncStorage.setItem(PREFS_CACHE_KEY, JSON.stringify(next));
 
       // ── Reschedule local daily-digest notification ──────────────────────
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      await AsyncStorage.removeItem(SCHEDULED_KEY);
+      // Cancel only the previously scheduled digest (by stored ID), not all notifications
+      const existingId = await AsyncStorage.getItem(SCHEDULED_KEY);
+      if (existingId) {
+        await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
+        await AsyncStorage.removeItem(SCHEDULED_KEY);
+      }
 
       if (next.daily_digest) {
         // Re-request permission in case the user granted it since install
         const { status } = await Notifications.requestPermissionsAsync();
         if (status === "granted") {
-          await Notifications.scheduleNotificationAsync({
+          const notifId = await Notifications.scheduleNotificationAsync({
             content: {
               title: "Your science digest is ready 🌊",
               body: "Fresh stories curated for you today.",
@@ -90,7 +94,8 @@ export function useNotificationPrefs(isLoggedIn: boolean) {
               minute: 0,
             },
           });
-          await AsyncStorage.setItem(SCHEDULED_KEY, "true");
+          // Store the ID so we cancel only this notification next time
+          await AsyncStorage.setItem(SCHEDULED_KEY, notifId);
 
           // Ensure push token is registered for server-push features
           await registerPushToken();

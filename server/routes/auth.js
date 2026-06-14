@@ -10,6 +10,33 @@ const { validateRegister, validateLogin, validateProfileUpdate, validatePassword
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+// In-memory OTP attempt tracking — max 10 wrong guesses per key per hour.
+// Backstop against 6-digit code brute force if the IP rate limit is ever loosened.
+const otpAttempts = new Map(); // key → { count, windowStart }
+const OTP_MAX_ATTEMPTS = 10;
+const OTP_WINDOW_MS = 60 * 60 * 1000;
+
+function otpAttemptExceeded(key) {
+  const now = Date.now();
+  const entry = otpAttempts.get(key);
+  if (!entry || now - entry.windowStart > OTP_WINDOW_MS) return false;
+  return entry.count >= OTP_MAX_ATTEMPTS;
+}
+
+function recordOtpFailure(key) {
+  const now = Date.now();
+  const entry = otpAttempts.get(key);
+  if (!entry || now - entry.windowStart > OTP_WINDOW_MS) {
+    otpAttempts.set(key, { count: 1, windowStart: now });
+  } else {
+    entry.count++;
+  }
+}
+
+function clearOtpAttempts(key) {
+  otpAttempts.delete(key);
+}
+
 function makeToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name },
@@ -129,8 +156,10 @@ router.patch('/password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword)
     return res.status(400).json({ error: 'currentPassword and newPassword are required' });
-  if (newPassword.length < 8)  return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (newPassword.length < 8)   return res.status(400).json({ error: 'Password must be at least 8 characters' });
   if (newPassword.length > 128) return res.status(400).json({ error: 'Password too long' });
+  if (!/\d/.test(newPassword))           return res.status(400).json({ error: 'Password must contain at least one number' });
+  if (!/[^a-zA-Z0-9]/.test(newPassword)) return res.status(400).json({ error: 'Password must contain at least one special character' });
 
   try {
     const { rows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
@@ -148,15 +177,24 @@ router.patch('/password', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/auth/account — permanently delete the authenticated user's account
+// Password accounts confirm with their password; passwordless (Google) accounts
+// confirm by sending { confirm: "DELETE" } instead.
 router.delete('/account', requireAuth, async (req, res) => {
-  const { password } = req.body;
-  if (!password) return res.status(400).json({ error: 'Password is required to confirm deletion' });
+  const { password, confirm } = req.body;
 
   try {
     const { rows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    const valid = await bcrypt.compare(password, rows[0].password_hash);
-    if (!valid) return res.status(401).json({ error: 'Incorrect password' });
+
+    if (rows[0].password_hash) {
+      if (!password) return res.status(400).json({ error: 'Password is required to confirm deletion' });
+      const valid = await bcrypt.compare(password, rows[0].password_hash);
+      if (!valid) return res.status(401).json({ error: 'Incorrect password' });
+    } else {
+      // Google-created account — no password on file
+      if (confirm !== 'DELETE')
+        return res.status(400).json({ error: 'Send { "confirm": "DELETE" } to confirm deletion' });
+    }
 
     await pool.query('DELETE FROM users WHERE id = $1', [req.user.id]);
     res.json({ ok: true });
@@ -210,6 +248,10 @@ router.post('/verify-email', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid code' });
 
   const tokenHash = crypto.createHash('sha256').update(String(otp)).digest('hex');
+  const attemptKey = `verify:${req.user.id}`;
+  if (otpAttemptExceeded(attemptKey))
+    return res.status(429).json({ error: 'Too many attempts — request a new code and try again later' });
+
   try {
     const { rows } = await pool.query(
       'SELECT email_verify_token, email_verified, email_verify_sent_at FROM users WHERE id = $1',
@@ -223,9 +265,12 @@ router.post('/verify-email', requireAuth, async (req, res) => {
     if (!sentAt || Date.now() - new Date(sentAt).getTime() > 60 * 60 * 1000)
       return res.status(400).json({ error: 'Code expired — please request a new verification email' });
 
-    if (rows[0].email_verify_token !== tokenHash)
+    if (rows[0].email_verify_token !== tokenHash) {
+      recordOtpFailure(attemptKey);
       return res.status(400).json({ error: 'Invalid or expired code' });
+    }
 
+    clearOtpAttempts(attemptKey);
     await pool.query(
       'UPDATE users SET email_verified = TRUE, email_verify_token = NULL WHERE id = $1',
       [req.user.id]
@@ -401,21 +446,35 @@ router.post('/google', async (req, res) => {
            (email, name, google_id, email_verified, subscription_tier, subscription_expires_at)
          VALUES ($1, $2, $3, $4, 'trial', $5)
          RETURNING id, email, name, interests, hashtag_includes, hashtag_excludes,
-                   subscription_tier, subscription_expires_at, email_verified`,
+                   subscription_tier, subscription_expires_at, email_verified, google_id`,
         [normalizedEmail, fallbackName, googleId, !!email_verified, trialEnds]
       );
       user = result.rows[0];
     } else {
-      // Existing account — link google_id + mark email verified if not already
+      // Existing account found by email
       if (!user.google_id) {
-        await pool.query(
-          'UPDATE users SET google_id = $1, email_verified = TRUE WHERE id = $2',
-          [googleId, user.id]
-        );
+        // Account was created with email/password — do NOT auto-link.
+        // An attacker who knows the victim's email could otherwise take over the account.
+        // The user must sign in with their password first.
+        return res.status(409).json({
+          error: 'An account with this email already exists. Please sign in with your email and password.',
+          code: 'EMAIL_ACCOUNT_EXISTS',
+        });
       }
-      // Strip sensitive fields before responding
-      const { password_hash, email_verify_token, email_verify_sent_at, ...safe } = user;
-      user = safe;
+
+      if (user.google_id !== googleId) {
+        // google_id on file belongs to a different Google account — reject
+        return res.status(409).json({ error: 'This email is linked to a different Google account.' });
+      }
+
+      // Re-fetch with only safe columns so we never accidentally leak password_hash etc.
+      const { rows: freshRows } = await pool.query(
+        `SELECT id, email, name, interests, hashtag_includes, hashtag_excludes,
+                subscription_tier, subscription_expires_at, email_verified, google_id
+         FROM users WHERE id = $1`,
+        [user.id]
+      );
+      user = freshRows[0];
     }
 
     res.json({ user, token: makeToken(user) });
@@ -429,6 +488,9 @@ router.post('/google', async (req, res) => {
 router.post('/reset-password', validatePasswordReset, async (req, res) => {
   const { email, otp, password } = req.body;
   const tokenHash = crypto.createHash('sha256').update(otp).digest('hex');
+  const attemptKey = `reset:${email.toLowerCase().trim()}`;
+  if (otpAttemptExceeded(attemptKey))
+    return res.status(429).json({ error: 'Too many attempts — request a new code and try again later' });
 
   try {
     const { rows } = await pool.query(
@@ -441,7 +503,11 @@ router.post('/reset-password', validatePasswordReset, async (req, res) => {
       [email.toLowerCase().trim(), tokenHash]
     );
 
-    if (!rows.length) return res.status(400).json({ error: 'Invalid or expired code' });
+    if (!rows.length) {
+      recordOtpFailure(attemptKey);
+      return res.status(400).json({ error: 'Invalid or expired code' });
+    }
+    clearOtpAttempts(attemptKey);
 
     const { id: tokenId, user_id } = rows[0];
     const password_hash = await bcrypt.hash(password, 10);

@@ -184,7 +184,7 @@ export default function Paywall({ navigation }: Props) {
               </Text>
             )}
             <Text style={{ color: "#22c55e", fontSize: 13, marginTop: 6, fontWeight: "600" }}>
-              ✓ 7-day free trial — cancel anytime
+              ✓ Cancel anytime
             </Text>
           </View>
 
@@ -204,7 +204,7 @@ export default function Paywall({ navigation }: Props) {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 17 }}>
-                Start Free Trial
+                Subscribe — {priceString}/mo
               </Text>
             )}
           </Pressable>
