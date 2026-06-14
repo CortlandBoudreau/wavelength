@@ -181,7 +181,7 @@ async function detectAndNotify() {
     const { rows: tokenRows } = await pool.query(
       `SELECT push_token FROM users
        WHERE push_token IS NOT NULL
-         AND (notification_prefs->>'topic_alerts')::boolean IS NOT FALSE`
+         AND (notification_prefs->>'topic_alerts')::boolean = TRUE`
     );
     const pushTokens = tokenRows.map((r) => r.push_token);
 

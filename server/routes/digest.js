@@ -17,10 +17,20 @@ router.get('/preview', async (req, res) => {
   }
 });
 
-// POST /api/digest/send
+// POST /api/digest/send — emails the digest to the requesting user's own address.
+// Per-user cooldown so one user can't burn SendGrid quota.
+const lastSentByUser = new Map(); // userId → timestamp
+const SEND_COOLDOWN_MS = 10 * 60 * 1000;
+
 router.post('/send', async (req, res) => {
+  const last = lastSentByUser.get(req.user.id) ?? 0;
+  if (Date.now() - last < SEND_COOLDOWN_MS) {
+    return res.status(429).json({ error: 'Digest already sent recently. Try again in a few minutes.' });
+  }
+
   try {
-    await sendDigest();
+    await sendDigest(req.user.email);
+    lastSentByUser.set(req.user.id, Date.now());
     res.json({ ok: true });
   } catch (err) {
     console.error('[POST /digest/send]', err.message);

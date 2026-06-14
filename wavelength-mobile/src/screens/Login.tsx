@@ -134,33 +134,34 @@ export default function Login({ navigation }: Props) {
 
           {/* Fixed footer — always visible above keyboard */}
           <View style={{ paddingHorizontal: 24, paddingBottom: 12, paddingTop: 8, backgroundColor: "#0f1e2d" }}>
-            {/* Google Sign-In — only shown when EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is configured */}
-            {googleAvailable && <Pressable
-              onPress={() => googlePrompt()}
-              disabled={loading || !googleRequest}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "#ffffff",
-                borderRadius: 14,
-                paddingVertical: 14,
-                marginBottom: 10,
-                opacity: loading || !googleRequest ? 0.6 : 1,
-              }}
-            >
-              <Ionicons name="logo-google" size={18} color="#DB4437" style={{ marginRight: 8 }} />
-              <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
-                Continue with Google
-              </Text>
-            </Pressable>}
-
-            {/* Divider */}
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
-              <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
-              <Text style={{ color: "#5a7a94", fontSize: 12, marginHorizontal: 10 }}>or</Text>
-              <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
-            </View>
+            {googleAvailable && (
+              <>
+                <Pressable
+                  onPress={() => googlePrompt()}
+                  disabled={loading || !googleRequest}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 14,
+                    paddingVertical: 14,
+                    marginBottom: 10,
+                    opacity: loading || !googleRequest ? 0.6 : 1,
+                  }}
+                >
+                  <Ionicons name="logo-google" size={18} color="#DB4437" style={{ marginRight: 8 }} />
+                  <Text style={{ color: "#2c3e50", fontWeight: "700", fontSize: 15 }}>
+                    Continue with Google
+                  </Text>
+                </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
+                  <Text style={{ color: "#5a7a94", fontSize: 12, marginHorizontal: 10 }}>or</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" }} />
+                </View>
+              </>
+            )}
 
             {/* Email Sign-In */}
             <Pressable

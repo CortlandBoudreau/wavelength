@@ -166,6 +166,24 @@ describe('parseClaudeResponse', () => {
     expect(() => parseClaudeResponse('not json at all')).toThrow();
     expect(() => parseClaudeResponse('')).toThrow();
   });
+
+  test('defaults relevant to true when the key is missing', () => {
+    expect(parseClaudeResponse(makeJson()).relevant).toBe(true);
+  });
+
+  test('only an explicit false marks a story irrelevant', () => {
+    expect(parseClaudeResponse(makeJson({ relevant: false })).relevant).toBe(false);
+    expect(parseClaudeResponse(makeJson({ relevant: true })).relevant).toBe(true);
+    // Non-boolean garbage must not delete a story
+    expect(parseClaudeResponse(makeJson({ relevant: 'no' })).relevant).toBe(true);
+  });
+
+  test('accepts a valid category and rejects an unknown one', () => {
+    expect(parseClaudeResponse(makeJson({ category: 'deep_sea' })).category).toBe('deep_sea');
+    // Unknown category → null, meaning "keep the source-assigned category"
+    expect(parseClaudeResponse(makeJson({ category: 'politics' })).category).toBeNull();
+    expect(parseClaudeResponse(makeJson()).category).toBeNull();
+  });
 });
 
 // ── buildThinContentSummary ───────────────────────────────────────────────────

@@ -62,25 +62,35 @@ function startScheduler() {
     cron.schedule('0 16 * * *', () => runPipeline('afternoon'));
   }
 
-  // 8:00 AM daily — send email digest
-  cron.schedule('0 8 * * *', async () => {
-    console.log('[Scheduler] Sending morning digest...');
-    try {
-      await sendDigest();
-    } catch (err) {
-      console.error('[Scheduler] Digest error:', err);
-    }
-  });
+  // Outbound email jobs (digest + posting reminders) go to the admin EMAIL_TO.
+  // Set EMAIL_JOBS_ENABLED=false on non-production environments (e.g. staging) so
+  // only one Railway service sends — otherwise every running service fires its
+  // own 8am digest to the same address, producing duplicate emails.
+  const emailJobsEnabled = process.env.EMAIL_JOBS_ENABLED !== 'false';
 
-  // 8:00 PM daily — posting reminder (after the day's content window has passed)
-  cron.schedule('0 20 * * *', async () => {
-    console.log('[Scheduler] Sending posting reminders...');
-    try {
-      await sendPostingReminders();
-    } catch (err) {
-      console.error('[Scheduler] Posting reminder error:', err);
-    }
-  });
+  if (emailJobsEnabled) {
+    // 8:00 AM daily — send email digest
+    cron.schedule('0 8 * * *', async () => {
+      console.log('[Scheduler] Sending morning digest...');
+      try {
+        await sendDigest();
+      } catch (err) {
+        console.error('[Scheduler] Digest error:', err);
+      }
+    });
+
+    // 8:00 PM daily — posting reminder (after the day's content window has passed)
+    cron.schedule('0 20 * * *', async () => {
+      console.log('[Scheduler] Sending posting reminders...');
+      try {
+        await sendPostingReminders();
+      } catch (err) {
+        console.error('[Scheduler] Posting reminder error:', err);
+      }
+    });
+  } else {
+    console.log('[Scheduler] EMAIL_JOBS_ENABLED=false — skipping digest & posting reminders');
+  }
 
   // 3:00 AM daily — soft-delete old stories + expire old topic moments
   cron.schedule('0 3 * * *', async () => {
@@ -93,7 +103,7 @@ function startScheduler() {
     }
   });
 
-  console.log('[Scheduler] Cron jobs registered (3am cleanup, 6am aggregate, 8am digest)');
+  console.log(`[Scheduler] Cron jobs registered (cleanup, aggregation, email jobs ${emailJobsEnabled ? 'ON' : 'OFF'})`);
 }
 
 module.exports = { startScheduler };

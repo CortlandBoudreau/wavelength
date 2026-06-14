@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import client from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -72,8 +73,11 @@ export default function Analytics({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [affinityLoading, setAffinityLoading] = useState(true);
 
-  // Hooks must all be declared before any early return
-  useEffect(() => {
+  // Hooks must all be declared before any early return.
+  // Refetch every time the tab gains focus — the screen stays mounted in the
+  // tab navigator, so opening/favouriting/posting stories elsewhere would
+  // otherwise leave these stats stale until app restart.
+  const load = useCallback(() => {
     if (isGuest) return;
     client
       .get<AnalyticsData>("/analytics")
@@ -87,6 +91,12 @@ export default function Analytics({ navigation }: { navigation: any }) {
       .catch(() => {})
       .finally(() => setAffinityLoading(false));
   }, [isGuest]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   // Guest upsell — rendered after all hooks are declared
   if (isGuest) {
@@ -229,7 +239,7 @@ export default function Analytics({ navigation }: { navigation: any }) {
                       <Ionicons name={icon} size={15} color={color} />
                     </View>
                     <Text style={{ flex: 1, color: "#2c3e50", fontSize: 14, fontWeight: "600", textTransform: "capitalize" }}>
-                      {row.category}
+                      {row.category.replace(/_/g, " ")}
                     </Text>
                     <Text style={{ color: "#6b7a8d", fontSize: 12, fontWeight: "600" }}>
                       {pct}%

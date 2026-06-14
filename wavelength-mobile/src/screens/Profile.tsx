@@ -46,6 +46,72 @@ function SectionCard({ children }: { children: React.ReactNode }) {
   );
 }
 
+const DIGEST_HOURS = Array.from({ length: 12 }, (_, i) => i + 6); // 6–17
+
+function formatHour(h: number) {
+  if (h === 0)  return "12:00 AM";
+  if (h < 12)   return `${h}:00 AM`;
+  if (h === 12) return "12:00 PM";
+  return `${h - 12}:00 PM`;
+}
+
+function DigestTimePicker({ hour, disabled, onChange }: {
+  hour: number;
+  disabled: boolean;
+  onChange: (h: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <Text style={{ color: "#6b7a8d", fontSize: 11, fontWeight: "600", letterSpacing: 0.5, marginBottom: 8 }}>
+        REMIND ME AT
+      </Text>
+      {/* Trigger button */}
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        disabled={disabled}
+        style={{
+          flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+          backgroundColor: "#f0f4f8", borderRadius: 10, borderWidth: 1.5,
+          borderColor: "#d0d8e4", paddingHorizontal: 14, paddingVertical: 10,
+        }}
+      >
+        <Text style={{ color: "#1a2a3a", fontSize: 14, fontWeight: "600" }}>{formatHour(hour)}</Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color="#6b7a8d" />
+      </Pressable>
+      {/* Inline dropdown */}
+      {open && (
+        <View style={{
+          marginTop: 4, borderRadius: 10, borderWidth: 1.5, borderColor: "#d0d8e4",
+          backgroundColor: "#fff", overflow: "hidden",
+        }}>
+          {DIGEST_HOURS.map((h) => {
+            const active = hour === h;
+            return (
+              <Pressable
+                key={h}
+                onPress={() => { onChange(h); setOpen(false); }}
+                style={{
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                  paddingHorizontal: 14, paddingVertical: 11,
+                  backgroundColor: active ? "rgba(74,158,219,0.08)" : "transparent",
+                  borderBottomWidth: h === DIGEST_HOURS[DIGEST_HOURS.length - 1] ? 0 : 1,
+                  borderBottomColor: "#f0f4f8",
+                }}
+              >
+                <Text style={{ color: active ? "#4A9EDB" : "#1a2a3a", fontSize: 14, fontWeight: active ? "700" : "400" }}>
+                  {formatHour(h)}
+                </Text>
+                {active && <Ionicons name="checkmark" size={16} color="#4A9EDB" />}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <Text
@@ -64,7 +130,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function Profile() {
-  const { user, logout, isGuest, guestInterests, completeOnboarding } = useAuth();
+  const { user, logout, logoutToRegister, isGuest, guestInterests, completeOnboarding } = useAuth();
   const { logOutRevenueCat, restorePurchases } = usePurchase();
   const { prefs: notifPrefs, saving: notifSaving, savePrefs } = useNotificationPrefs(!isGuest && !!user);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -156,6 +222,10 @@ export default function Profile() {
   };
 
   const save = async () => {
+    if (interests.length === 0) {
+      Alert.alert("Pick at least one topic", "Select at least one topic so we can build your feed.");
+      return;
+    }
     setSaving(true);
     try {
       if (isGuest) {
@@ -595,7 +665,7 @@ export default function Profile() {
             {/* Guest upgrade banner */}
             {isGuest && (
               <Pressable
-                onPress={logout}
+                onPress={logoutToRegister}
                 style={{
                   backgroundColor: "#1a2a3a",
                   borderRadius: 14,
@@ -655,6 +725,11 @@ export default function Profile() {
                   );
                 })}
               </View>
+              {interests.length === 0 && (
+                <Text style={{ color: "#e05c5c", fontSize: 12, marginTop: 10, fontWeight: "600" }}>
+                  Select at least one topic to build your feed.
+                </Text>
+              )}
             </SectionCard>
 
             {/* Hashtag Filters — logged-in only */}
@@ -721,12 +796,12 @@ export default function Profile() {
             {/* Save */}
             <Pressable
               onPress={save}
-              disabled={saving}
+              disabled={saving || interests.length === 0}
               style={{
                 backgroundColor: "#4A9EDB",
                 borderRadius: 12, paddingVertical: 15,
                 alignItems: "center", marginBottom: 12,
-                opacity: saving ? 0.6 : 1,
+                opacity: saving || interests.length === 0 ? 0.6 : 1,
               }}
             >
               {saving ? (
@@ -771,36 +846,13 @@ export default function Profile() {
                     </Pressable>
                   </View>
 
-                  {/* Time picker — only shown when daily digest is on */}
+                  {/* Time picker — dropdown, shown when daily digest is on */}
                   {notifPrefs.daily_digest && (
-                    <View>
-                      <Text style={{ color: "#6b7a8d", fontSize: 11, fontWeight: "600", letterSpacing: 0.5, marginBottom: 8 }}>
-                        REMIND ME AT
-                      </Text>
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {[6, 7, 8, 9, 10, 12].map((h) => {
-                          const label = h < 12 ? `${h}am` : "12pm";
-                          const active = notifPrefs.daily_digest_hour === h;
-                          return (
-                            <Pressable
-                              key={h}
-                              onPress={() => savePrefs({ daily_digest_hour: h })}
-                              disabled={notifSaving}
-                              style={{
-                                paddingHorizontal: 14, paddingVertical: 7,
-                                borderRadius: 20, borderWidth: 1.5,
-                                backgroundColor: active ? "#4A9EDB" : "#f0f4f8",
-                                borderColor: active ? "#4A9EDB" : "#d0d8e4",
-                              }}
-                            >
-                              <Text style={{ color: active ? "#fff" : "#4a6a84", fontSize: 13, fontWeight: "600" }}>
-                                {label}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
+                    <DigestTimePicker
+                      hour={notifPrefs.daily_digest_hour}
+                      disabled={notifSaving}
+                      onChange={(h) => savePrefs({ daily_digest_hour: h })}
+                    />
                   )}
                 </View>
 

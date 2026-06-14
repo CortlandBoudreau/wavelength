@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View, Text, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +18,14 @@ const FEATURES = [
 ];
 
 export default function Landing({ navigation }: Props) {
-  const { loginAsGuest } = useAuth();
+  const { loginAsGuest, pendingAuthRoute, clearPendingAuthRoute, guestInterests } = useAuth();
+
+  useEffect(() => {
+    if (pendingAuthRoute === "register") {
+      clearPendingAuthRoute();
+      navigation.navigate("Register", { interests: guestInterests });
+    }
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#0f1e2d" }}>

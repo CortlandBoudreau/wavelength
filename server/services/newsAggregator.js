@@ -24,9 +24,7 @@ const CATEGORY_QUERIES = {
 const RSS_FEEDS = [
   // ScienceDaily
   { url: 'https://www.sciencedaily.com/rss/earth_climate/oceanography.xml',                      category: 'marine_science' },
-  { url: 'https://www.sciencedaily.com/rss/plants_animals/marine_and_freshwater_biology.xml',    category: 'marine_science' },
   { url: 'https://www.sciencedaily.com/rss/earth_climate/coral_reefs.xml',                       category: 'coral_reefs' },
-  { url: 'https://www.sciencedaily.com/rss/plants_animals/wildlife.xml',                         category: 'wildlife' },
   { url: 'https://www.sciencedaily.com/rss/earth_climate.xml',                                   category: 'climate' },
   { url: 'https://www.sciencedaily.com/rss/space_time/astronomy.xml',                            category: 'space' },
   { url: 'https://www.sciencedaily.com/rss/health_medicine/brain_tumor.xml',                     category: 'health_science' },
@@ -35,8 +33,6 @@ const RSS_FEEDS = [
   { url: 'https://phys.org/rss-feed/biology-news/',                                              category: 'biodiversity' },
   { url: 'https://phys.org/rss-feed/space-news/',                                                category: 'space' },
   { url: 'https://phys.org/rss-feed/earth-news/',                                                category: 'climate' },
-  // EurekAlert — press releases direct from research institutions
-  { url: 'https://www.eurekalert.org/rss.xml',                                                   category: 'cool_facts' },
   // The Guardian Science
   { url: 'https://www.theguardian.com/science/rss',                                              category: 'cool_facts' },
   { url: 'https://www.theguardian.com/environment/rss',                                          category: 'environment' },
@@ -46,8 +42,6 @@ const RSS_FEEDS = [
   { url: 'https://www.nasa.gov/rss/dyn/breaking_news.rss',                                       category: 'space' },
   // NOAA
   { url: 'https://oceanservice.noaa.gov/rss/os.xml',                                             category: 'marine_science' },
-  // ScienceAlert
-  { url: 'https://feeds.feedburner.com/sciencealert/latest',                                     category: 'cool_facts' },
   // Woods Hole Oceanographic Institution
   { url: 'https://www.whoi.edu/press-room/news-releases/rss/',                                   category: 'marine_science' },
   // New Scientist
@@ -98,7 +92,6 @@ const YOUTUBE_FEEDS = [
   // Verified working ✅
   { channelId: 'UCsXVk37bltHxD1rDPwtNM8Q', name: 'Kurzgesagt',            category: 'cool_facts' },
   { channelId: 'UCZYTClx2T1of7BRZ86-8fow', name: 'SciShow',               category: 'cool_facts' },
-  { channelId: 'UCVoL__2BJ7nHSzyMSXTeXoQ', name: 'MinuteEarth',           category: 'environment' },
   { channelId: 'UC7DdEm33SyaTDtWYGO2CwdA', name: 'PBS Space Time',        category: 'space' },
   { channelId: 'UCHnyfMqiRRG1u-2MsSQLbXA', name: 'Veritasium',            category: 'cool_facts' },
   { channelId: 'UCUHW94eEFW7hkUMVaZz4eDg', name: 'PBS Eons',              category: 'biodiversity' },
@@ -264,7 +257,9 @@ async function getRedditToken() {
   );
 
   redditToken.value     = resp.data.access_token;
-  redditToken.expiresAt = Date.now() + (resp.data.expires_in - 60) * 1000; // 1-min buffer
+  const expiresIn       = (typeof resp.data.expires_in === 'number' && resp.data.expires_in > 60)
+    ? resp.data.expires_in : 3600;
+  redditToken.expiresAt = Date.now() + (expiresIn - 60) * 1000; // 1-min buffer
   return redditToken.value;
 }
 
@@ -496,21 +491,25 @@ async function saveStories(stories) {
   return saved;
 }
 
-async function runAggregation() {
+async function runAggregation({ skipNewsAPI = false } = {}) {
   console.log('[Aggregator] Starting ocean-focused aggregation...');
   const allStories = [];
   const errors = [];
 
-  // NewsAPI
-  for (const [category, query] of Object.entries(CATEGORY_QUERIES)) {
-    try {
-      const articles = await fetchFromNewsAPI(category, query);
-      console.log(`[Aggregator] NewsAPI ${category}: ${articles.length} articles`);
-      allStories.push(...articles);
-    } catch (err) {
-      const msg = `NewsAPI [${category}]: ${err.response?.data?.message || err.message}`;
-      console.error('[Aggregator]', msg);
-      errors.push(msg);
+  // NewsAPI — skipped during resets to avoid burning the 100 req/day quota
+  if (skipNewsAPI) {
+    console.log('[Aggregator] NewsAPI skipped (skipNewsAPI=true)');
+  } else {
+    for (const [category, query] of Object.entries(CATEGORY_QUERIES)) {
+      try {
+        const articles = await fetchFromNewsAPI(category, query);
+        console.log(`[Aggregator] NewsAPI ${category}: ${articles.length} articles`);
+        allStories.push(...articles);
+      } catch (err) {
+        const msg = `NewsAPI [${category}]: ${err.response?.data?.message || err.message}`;
+        console.error('[Aggregator]', msg);
+        errors.push(msg);
+      }
     }
   }
 

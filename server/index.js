@@ -26,6 +26,10 @@ if (process.env.JWT_SECRET && (
 
 const app = express();
 
+// Railway runs behind a reverse proxy — trust X-Forwarded-For so rate limiting
+// keys on the real client IP instead of lumping every user into one bucket.
+app.set('trust proxy', 1);
+
 // Security headers (X-Frame-Options, X-Content-Type-Options, CSP, HSTS, etc.)
 app.use(helmet());
 

@@ -9,7 +9,7 @@ import {
   Animated,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -33,6 +33,7 @@ type DashboardNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function Dashboard() {
   const navigation = useNavigation<DashboardNav>();
+  const insets = useSafeAreaInsets();
   const { isGuest, user, guestInterests } = useAuth();
   const isLoggedIn = !!user;
   const isPro = isProUser(user);
@@ -98,8 +99,8 @@ export default function Dashboard() {
   const handleStoryPress = useCallback(async (story: Story) => {
     if (isGuest) {
       const { alreadySeen, total } = await recordGuestStoryView(story.id);
-      // Block only if this is a brand-new article AND the daily cap is reached
-      if (!alreadySeen && total > FREE_DETAIL_LIMIT) {
+      // Block once the new total meets or exceeds the cap (total is post-increment)
+      if (!alreadySeen && total >= FREE_DETAIL_LIMIT) {
         navigation.navigate("Paywall");
         return;
       }
@@ -147,12 +148,12 @@ export default function Dashboard() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["top", "left", "right"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#1a2a3a" }} edges={["left", "right"]}>
       {/* New stories banner */}
       <Animated.View
         pointerEvents="none"
         style={{
-          position: "absolute", top: 60, left: 0, right: 0, zIndex: 99,
+          position: "absolute", top: insets.top + 60, left: 0, right: 0, zIndex: 99,
           alignItems: "center", opacity: bannerOpacity,
         }}
       >
@@ -167,108 +168,118 @@ export default function Dashboard() {
         </View>
       </Animated.View>
 
-      {/* ── Collapsing header (logo + search) ───────────────
-            Fixed-height clip container — no layout change on scroll.
-            Inner view translates up + fades out via native driver.     */}
-      <View style={{ height: COLLAPSE_HEIGHT, overflow: "hidden", backgroundColor: "#1a2a3a" }}>
+      {/* ── Sliding header ────────────────────────────────────────
+            The entire block (logo+search+sort+categories) translates up
+            by COLLAPSE_HEIGHT. Logo/search slide off screen; sort chips
+            and category tabs scroll up into their place and become the
+            new sticky top. FlatList paddingTop accounts for full height. */}
       <Animated.View style={{
-        height: COLLAPSE_HEIGHT,
-        paddingHorizontal: 16,
-        paddingTop: 10,
+        position: "absolute",
+        top: 0, left: 0, right: 0,
+        zIndex: 10,
+        paddingTop: insets.top,
         transform: [{ translateY: headerTranslateY }],
-        opacity: headerOpacity,
+        backgroundColor: "#1a2a3a",
       }}>
-        {/* Logo row */}
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <WaveLogo size="md" />
-          {isLoggedIn && isPersonalized && !topToday && (
-            <View style={{
-              flexDirection: "row", alignItems: "center", gap: 4,
-              backgroundColor: "rgba(99,102,241,0.18)",
-              borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
-            }}>
-              <Ionicons name="sparkles" size={12} color="#a78bfa" />
-              <Text style={{ color: "#a78bfa", fontSize: 11, fontWeight: "700" }}>Personalized</Text>
+        {/* Logo + search — slides off screen on scroll */}
+        <View style={{
+          height: COLLAPSE_HEIGHT,
+          paddingHorizontal: 16,
+          paddingTop: 10,
+          overflow: "hidden",
+        }}>
+          <Animated.View style={{ opacity: headerOpacity }}>
+            {/* Logo row */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <WaveLogo size="md" />
+              {isLoggedIn && isPersonalized && !topToday && (
+                <View style={{
+                  flexDirection: "row", alignItems: "center", gap: 4,
+                  backgroundColor: "rgba(99,102,241,0.18)",
+                  borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+                }}>
+                  <Ionicons name="sparkles" size={12} color="#a78bfa" />
+                  <Text style={{ color: "#a78bfa", fontSize: 11, fontWeight: "700" }}>Personalized</Text>
+                </View>
+              )}
             </View>
-          )}
+
+            {/* Search bar */}
+            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+              <Ionicons name="search-outline" size={16} color="#7a96ae" />
+              <TextInput
+                style={{ flex: 1, color: "#ffffff", fontSize: 14 }}
+                placeholder="Search stories…"
+                placeholderTextColor="#5a7a94"
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <Pressable onPress={() => { setSearchQuery(""); setSearchActive(false); loadStories(); }} hitSlop={8}>
+                  <Ionicons name="close-circle" size={16} color="#5a7a94" />
+                </Pressable>
+              )}
+            </View>
+          </Animated.View>
         </View>
 
-        {/* Search bar */}
-        <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
-          <Ionicons name="search-outline" size={16} color="#7a96ae" />
-          <TextInput
-            style={{ flex: 1, color: "#ffffff", fontSize: 14 }}
-            placeholder="Search stories…"
-            placeholderTextColor="#5a7a94"
-            value={searchQuery}
-            onChangeText={handleSearchChange}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => { setSearchQuery(""); setSearchActive(false); loadStories(); }} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color="#5a7a94" />
+        {/* Sort chips — slide up to become new sticky top */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
+          <View style={{ flexDirection: "row", gap: 8, flexWrap: "nowrap", alignItems: "center" }}>
+            <Pressable
+              onPress={() => { setTopToday((t) => !t); if (!topToday) setSort("newest"); }}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 5,
+                backgroundColor: topToday ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+              }}
+            >
+              <Ionicons name="trophy-outline" size={13} color={topToday ? "#fff" : "#7a96ae"} />
+              <Text style={{ color: topToday ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>Top Today</Text>
             </Pressable>
-          )}
+
+            {!topToday && (
+              <Pressable
+                onPress={() => setSort((s) => s === "newest" ? "score" : "newest")}
+                style={{
+                  flexDirection: "row", alignItems: "center", gap: 5,
+                  backgroundColor: sort === "score" ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                  borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+                }}
+              >
+                <Ionicons name={sort === "score" ? "flame" : "time-outline"} size={13} color={sort === "score" ? "#fff" : "#7a96ae"} />
+                <Text style={{ color: sort === "score" ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
+                  {sort === "score" ? "Top Rated" : "Newest"}
+                </Text>
+              </Pressable>
+            )}
+
+            {isLoggedIn && isPro && (
+              <Pressable
+                onPress={() => setHidePosted((h) => !h)}
+                style={{
+                  flexDirection: "row", alignItems: "center", gap: 5,
+                  backgroundColor: hidePosted ? "#4A9EDB" : "rgba(255,255,255,0.12)",
+                  borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+                }}
+              >
+                <Ionicons name={hidePosted ? "eye-off" : "eye-outline"} size={13} color={hidePosted ? "#fff" : "#7a96ae"} />
+                <Text style={{ color: hidePosted ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>Hide Posted</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* Category tabs */}
+        <View style={{ backgroundColor: "#ffffff", borderBottomWidth: 1, borderBottomColor: "#e0e7ef" }}>
+          <CategoryTabs categories={categories} selected={category} onSelect={setCategory} />
         </View>
       </Animated.View>
-      </View>
 
-      {/* ── Always-visible sticky bar (sort chips + category tabs) ── */}
-      <View style={{ backgroundColor: "#1a2a3a", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-          <Pressable
-            onPress={() => { setTopToday((t) => !t); if (!topToday) setSort("newest"); }}
-            style={{
-              flexDirection: "row", alignItems: "center", gap: 5,
-              backgroundColor: topToday ? "#f97316" : "rgba(255,255,255,0.12)",
-              borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
-            }}
-          >
-            <Ionicons name="trophy-outline" size={13} color={topToday ? "#fff" : "#7a96ae"} />
-            <Text style={{ color: topToday ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>Top Today</Text>
-          </Pressable>
-
-          {!topToday && (
-            <Pressable
-              onPress={() => setSort((s) => s === "newest" ? "score" : "newest")}
-              style={{
-                flexDirection: "row", alignItems: "center", gap: 5,
-                backgroundColor: sort === "score" ? "#4A9EDB" : "rgba(255,255,255,0.12)",
-                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
-              }}
-            >
-              <Ionicons name={sort === "score" ? "flame" : "time-outline"} size={13} color={sort === "score" ? "#fff" : "#7a96ae"} />
-              <Text style={{ color: sort === "score" ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>
-                {sort === "score" ? "Top Rated" : "Newest"}
-              </Text>
-            </Pressable>
-          )}
-
-          {isLoggedIn && isPro && (
-            <Pressable
-              onPress={() => setHidePosted((h) => !h)}
-              style={{
-                flexDirection: "row", alignItems: "center", gap: 5,
-                backgroundColor: hidePosted ? "#4A9EDB" : "rgba(255,255,255,0.12)",
-                borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
-              }}
-            >
-              <Ionicons name={hidePosted ? "eye-off" : "eye-outline"} size={13} color={hidePosted ? "#fff" : "#7a96ae"} />
-              <Text style={{ color: hidePosted ? "#fff" : "#7a96ae", fontSize: 12, fontWeight: "700" }}>Hide Posted</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      {/* Category tabs — always pinned */}
-      <View style={{ backgroundColor: "#ffffff", borderBottomWidth: 1, borderBottomColor: "#e0e7ef" }}>
-        <CategoryTabs categories={categories} selected={category} onSelect={setCategory} />
-      </View>
-
-      {/* Story list */}
-      <View style={{ flex: 1 }}>
-        {loading ? (
-          <View style={{ flex: 1, paddingTop: 12, backgroundColor: "#F5F0E8" }}>
+      {/* Story list — full screen, header overlays the top via absolute positioning */}
+      {loading ? (
+          <View style={{ flex: 1, paddingTop: COLLAPSE_HEIGHT + 106 + insets.top, backgroundColor: "#F5F0E8" }}>
             {[1, 2, 3, 4].map((k) => <SkeletonCard key={k} />)}
           </View>
         ) : (
@@ -308,10 +319,9 @@ export default function Dashboard() {
             ItemSeparatorComponent={() => (
               <View style={{ height: 1, backgroundColor: "#ddd8d0", marginHorizontal: 14, marginVertical: 2 }} />
             )}
-            contentContainerStyle={{ paddingTop: 14, paddingBottom: 32 }}
+            contentContainerStyle={{ paddingTop: COLLAPSE_HEIGHT + 106 + insets.top, paddingBottom: 32 }}
           />
         )}
-      </View>
     </SafeAreaView>
   );
 }
