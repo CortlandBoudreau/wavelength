@@ -455,6 +455,18 @@ function isTitleJunk(title) {
   return false;
 }
 
+// Remove social hashtags from a headline (common in Mastodon/Bluesky posts).
+// Run AFTER isTitleJunk so the hashtag-density junk check above still sees them.
+function stripHashtags(title) {
+  if (!title || typeof title !== 'string') return title;
+  // Drop trailing hashtag clusters appended as metadata (e.g. "...respect #HumanRight #News")
+  let t = title.replace(/(?:\s*#[\w-]+)+\s*$/g, '').trim();
+  // Strip the leading # from remaining inline hashtags, keeping the word
+  // (#energy -> energy), while leaving things like "#1" or "C#" untouched.
+  t = t.replace(/#(?=[A-Za-z])/g, '');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
 async function saveStories(stories) {
   let saved = 0;
   let skippedJunk = 0;
@@ -463,6 +475,13 @@ async function saveStories(stories) {
 
     const cleanedTitle = cleanTitle(story.title);
     if (isTitleJunk(cleanedTitle)) {
+      skippedJunk++;
+      continue;
+    }
+
+    // Strip social hashtags for the stored/displayed headline (after the junk check)
+    const displayTitle = stripHashtags(cleanedTitle);
+    if (!displayTitle || displayTitle.length < 10) {
       skippedJunk++;
       continue;
     }
@@ -480,7 +499,7 @@ async function saveStories(stories) {
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (url) DO NOTHING
          RETURNING id`,
-        [cleanedTitle, story.source, story.url, story.published_at, story.category, story.raw_body]
+        [displayTitle, story.source, story.url, story.published_at, story.category, story.raw_body]
       );
       if (result.rowCount > 0) saved++;
     } catch (err) {
