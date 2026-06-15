@@ -414,12 +414,23 @@ function cleanTitle(raw) {
   // Strip leading "RE:", "RT:", reply/retweet markers
   t = t.replace(/^(RE|RT|FWD|THREAD):\s*/i, '');
 
-  // Strip URLs (http/https)
-  t = t.replace(/https?:\/\/\S+/g, '');
+  // Convert markdown links [text](url) -> text (keep the readable label)
+  t = t.replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)]*\)/gi, '$1');
+
+  // Strip HTML tags (<a href=...>, </a>, <p>, etc.), keeping any inner text
+  t = t.replace(/<[^>]+>/g, ' ');
+
+  // Strip URLs (http/https and bare www.)
+  t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, '');
+
+  // Remove any leftover empty [] or () brackets from stripped links
+  t = t.replace(/[\[(]\s*[\])]/g, '');
 
   // Strip emoji (broad unicode ranges)
   t = t.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
   t = t.replace(/[\u{2600}-\u{27FF}]/gu, '');
+  // Strip zero-width joiners / variation selectors left behind by stripped emoji
+  t = t.replace(/[​-‍️﻿]/g, '');
 
   // Collapse whitespace
   t = t.replace(/\s+/g, ' ').trim();
@@ -455,6 +466,21 @@ function isTitleJunk(title) {
   return false;
 }
 
+// Remove social hashtags from a headline (common in Mastodon/Bluesky posts).
+// Run AFTER isTitleJunk so the hashtag-density junk check above still sees them.
+function stripHashtags(title) {
+  if (!title || typeof title !== 'string') return title;
+  // Drop trailing hashtag clusters appended as metadata (e.g. "...respect #HumanRight #News")
+  let t = title.replace(/(?:\s*#[\w-]+)+\s*$/g, '').trim();
+  // Strip the leading # from remaining inline hashtags, keeping the word
+  // (#energy -> energy), while leaving things like "#1" or "C#" untouched.
+  t = t.replace(/#(?=[A-Za-z])/g, '');
+  // Clean up a dangling separator left where the trailing hashtags were
+  // (e.g. "Kangaroo Rat... Death? |" -> "...Death?"). Keeps sentence punctuation.
+  t = t.replace(/[\s|·–—]+$/g, '');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
 async function saveStories(stories) {
   let saved = 0;
   let skippedJunk = 0;
@@ -463,6 +489,13 @@ async function saveStories(stories) {
 
     const cleanedTitle = cleanTitle(story.title);
     if (isTitleJunk(cleanedTitle)) {
+      skippedJunk++;
+      continue;
+    }
+
+    // Strip social hashtags for the stored/displayed headline (after the junk check)
+    const displayTitle = stripHashtags(cleanedTitle);
+    if (!displayTitle || displayTitle.length < 10) {
       skippedJunk++;
       continue;
     }
@@ -480,7 +513,7 @@ async function saveStories(stories) {
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (url) DO NOTHING
          RETURNING id`,
-        [cleanedTitle, story.source, story.url, story.published_at, story.category, story.raw_body]
+        [displayTitle, story.source, story.url, story.published_at, story.category, story.raw_body]
       );
       if (result.rowCount > 0) saved++;
     } catch (err) {
@@ -610,4 +643,4 @@ async function runAggregation({ skipNewsAPI = false } = {}) {
   return { saved, fetched, skipped, errors };
 }
 
-module.exports = { runAggregation };
+module.exports = { runAggregation, cleanTitle, stripHashtags };
