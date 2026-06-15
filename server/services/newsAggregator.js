@@ -429,6 +429,8 @@ function cleanTitle(raw) {
   // Strip emoji (broad unicode ranges)
   t = t.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
   t = t.replace(/[\u{2600}-\u{27FF}]/gu, '');
+  // Strip zero-width joiners / variation selectors left behind by stripped emoji
+  t = t.replace(/[​-‍️﻿]/g, '');
 
   // Collapse whitespace
   t = t.replace(/\s+/g, ' ').trim();
@@ -473,6 +475,9 @@ function stripHashtags(title) {
   // Strip the leading # from remaining inline hashtags, keeping the word
   // (#energy -> energy), while leaving things like "#1" or "C#" untouched.
   t = t.replace(/#(?=[A-Za-z])/g, '');
+  // Clean up a dangling separator left where the trailing hashtags were
+  // (e.g. "Kangaroo Rat... Death? |" -> "...Death?"). Keeps sentence punctuation.
+  t = t.replace(/[\s|·–—]+$/g, '');
   return t.replace(/\s+/g, ' ').trim();
 }
 
