@@ -414,8 +414,17 @@ function cleanTitle(raw) {
   // Strip leading "RE:", "RT:", reply/retweet markers
   t = t.replace(/^(RE|RT|FWD|THREAD):\s*/i, '');
 
-  // Strip URLs (http/https)
-  t = t.replace(/https?:\/\/\S+/g, '');
+  // Convert markdown links [text](url) -> text (keep the readable label)
+  t = t.replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)]*\)/gi, '$1');
+
+  // Strip HTML tags (<a href=...>, </a>, <p>, etc.), keeping any inner text
+  t = t.replace(/<[^>]+>/g, ' ');
+
+  // Strip URLs (http/https and bare www.)
+  t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, '');
+
+  // Remove any leftover empty [] or () brackets from stripped links
+  t = t.replace(/[\[(]\s*[\])]/g, '');
 
   // Strip emoji (broad unicode ranges)
   t = t.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
@@ -629,4 +638,4 @@ async function runAggregation({ skipNewsAPI = false } = {}) {
   return { saved, fetched, skipped, errors };
 }
 
-module.exports = { runAggregation };
+module.exports = { runAggregation, cleanTitle, stripHashtags };
