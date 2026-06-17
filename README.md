@@ -22,10 +22,11 @@ Finding fresh, relevant science content for Instagram manually takes hours. Wave
 - **Duplicate detection** — deduplicated by URL on ingest; similar stories grouped into topic clusters using Jaccard similarity on title tokens
 
 ### AI Summarisation (Claude)
-- `claude-sonnet-4-6` for story summaries — plain-language 2–3 sentences, 3 caption bullet points, content angle, 5 hashtags, engagement score 1–10
-- `claude-haiku-4-5` for Instagram caption generation — warm, accessible voice; hook → explanation → CTA → hashtags; cached per story
+- `claude-haiku-4-5` for story summaries (override via `SUMMARIZER_MODEL`) — plain-language 2–3 sentences, 3 caption bullet points, content angle, 5 hashtags, engagement score 1–10
+- `claude-haiku-4-6` for Instagram caption generation — warm, accessible voice; hook → explanation → CTA → hashtags; cached per story
+- **Relevance gate + category correction** — the same summarization call judges whether a story is genuinely science and assigns the best-fit category. Off-topic content (politics/sports/celebrity/markets/spam that leaked from broad feeds) is soft-deleted; mis-tagged stories are recategorized. Curated sources (arXiv, YouTube channels) are trusted and never dropped.
 - **Source-type context injection** — different system prompt context per source (YouTube descriptions vs. Reddit titles vs. arXiv abstracts vs. social posts)
-- **Thin-content pre-filter** — Reddit/Bluesky/Mastodon posts under 80 chars skip Claude entirely to save cost
+- **Thin-content fast path** — Reddit/Bluesky/Mastodon posts under 80 chars skip the full summary to save cost, but still get a lightweight relevance check
 - Prompt injection defences: user content sandboxed in `<article>` XML tags, output validated against allowlists
 
 ### Mobile App (React Native / Expo)
@@ -79,11 +80,11 @@ Finding fresh, relevant science content for Instagram manually takes hours. Wave
 | Mobile | React Native + Expo SDK ~54 (managed workflow, Android) |
 | Backend | Node.js + Express |
 | Database | PostgreSQL (Railway) |
-| AI | Claude API — `claude-sonnet-4-6` (summaries) · `claude-haiku-4-5` (captions) |
+| AI | Claude API — `claude-haiku-4-5` (summaries, configurable) · `claude-haiku-4-6` (captions) |
 | Subscriptions | RevenueCat |
 | Email | SendGrid (password reset OTP + email verification) |
 | News sources | RSS · Reddit · Bluesky AT Protocol · Mastodon · arXiv · YouTube RSS |
-| Scheduling | node-cron (6am aggregate + cluster, 7am summarise) |
+| Scheduling | node-cron (aggregation pipeline + 8am digest + 3am cleanup; gated by env vars) |
 | Auth | JWT + bcrypt |
 | Security | helmet · express-rate-limit · input validation middleware |
 | Navigation | React Navigation (native stack) |
@@ -142,12 +143,17 @@ npx expo run:android
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `ANTHROPIC_API_KEY` | Claude API key |
+| `NEWS_API_KEY` | NewsAPI key (aggregation source) |
 | `SENDGRID_API_KEY` | SendGrid key (must start with `SG.`) |
 | `EMAIL_FROM` | Verified SendGrid sender address |
+| `EMAIL_TO` | Admin recipient for the daily digest + posting reminders |
 | `JWT_SECRET` | Min 32 chars — `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
 | `ADMIN_KEY` | Secret header value for the manual refresh endpoint |
 | `CLIENT_URL` | Frontend origin for CORS |
 | `PORT` | API port (default `3001`) |
+| `AGGREGATION_RUNS_PER_DAY` | `0` = aggregation fully paused, `1` = 10am, `2` = +4pm, `3` = +2am (default) |
+| `EMAIL_JOBS_ENABLED` | `0`/`false`/`off`/`no` disables digest + posting reminders (default on). Set `0` on staging / unused services so only one service emails `EMAIL_TO`. |
+| `SUMMARIZER_MODEL` | Override the summarizer model (default `claude-haiku-4-5`) |
 
 ---
 
@@ -240,10 +246,28 @@ r/science, r/EverythingScience, r/space, r/Astronomy, r/physics, r/chemistry, r/
 
 | Time | Job |
 |---|---|
-| 6:00 AM daily | Aggregate all sources → deduplicate → cluster by topic |
-| 7:00 AM daily | Summarise new stories with Claude (5 concurrent, thin-content fast-path) |
+| 2:00 AM | Aggregation pipeline — runs only when `AGGREGATION_RUNS_PER_DAY` ≥ 3 |
+| 3:00 AM | Cleanup — soft-delete stories >14 days old + expire old topic moments |
+| 8:00 AM | Email digest — *(skipped when `EMAIL_JOBS_ENABLED` is off)* |
+| 10:00 AM | Aggregation pipeline — runs unless `AGGREGATION_RUNS_PER_DAY=0` |
+| 4:00 PM | Aggregation pipeline — runs only when `AGGREGATION_RUNS_PER_DAY` ≥ 2 |
+| 8:00 PM | Posting reminder — *(skipped when `EMAIL_JOBS_ENABLED` is off)* |
+
+The aggregation pipeline = fetch all sources → summarise (with relevance gate) → cluster → freshness decay → burst detection.
 
 Manual trigger: `POST /api/stories/refresh` with `x-admin-secret` header.
+
+---
+
+## Maintenance Scripts
+
+One-off scripts in `server/scripts/` (load `.env` from the repo root; need `DATABASE_URL`):
+
+| Script | Purpose |
+|---|---|
+| `reclassifyStories.js` | Re-run the relevance gate over existing stories — soft-delete off-topic, fix mis-categorized. Dry-run by default; `--commit` to apply. |
+| `cleanTitles.js` | Re-clean existing titles (strip social hashtags, markdown/HTML links). Dry-run by default; `--commit` to apply. |
+| `createPromoCode.js` | Create/update a promo code: `node scripts/createPromoCode.js <CODE> <tier> <days\|lifetime> [max_uses]` |
 
 ---
 
