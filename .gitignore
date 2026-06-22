@@ -18,6 +18,10 @@ build/
 .claude.json
 CLAUDE.md
 
+# Local session working files (agent handoff / memory)
+handoff.yaml
+memory.yaml
+
 # OS files
 .DS_Store
 Thumbs.db
